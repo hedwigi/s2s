@@ -1,0 +1,15 @@
+# idea
+.idea/
+*.xml
+*__pycache__/
+venv/
+
+# data
+data/t*
+data/w*
+
+# model
+model/*data*
+model/*.index
+model/*.meta
+model/checkpoint
