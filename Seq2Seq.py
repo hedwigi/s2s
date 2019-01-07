@@ -12,7 +12,11 @@ class Seq2Seq(object):
         # *************** PLACEHOLDER & INPUT ***************
         # [batch_size, sequence_len]
         self.source_input = tf.placeholder(tf.int32, [None, None], name="source_input")
-        self.target_input = tf.placeholder(tf.int32, [None, None], name="target_input")
+        self.target_output = tf.placeholder(tf.int32, [None, None], name="target_output")
+
+        # Todo strided_slice
+        after_slice = tf.strided_slice(self.target_output, [0, 0], [params["batch_size"], -1], [1, 1])
+        self.target_input = tf.concat([tf.fill([params["batch_size"], 1], params["start_id"]), after_slice], 1)
 
         # TODO why need target_ids len???
         self.target_sequence_length = tf.placeholder(tf.int32, [None], name="target_sequence_length")
@@ -76,7 +80,7 @@ class Seq2Seq(object):
         with tf.name_scope("optimization"):
             self.cost = tf.contrib.seq2seq.sequence_loss(
                 training_logits,
-                self.target_input,
+                self.target_output,  # without <s>
                 masks
             )
 
@@ -110,7 +114,7 @@ class Seq2Seq(object):
                 # train phase的logit与input长度一定相同，才能计算loss
                 _, train_batch_loss = sess.run([self.train_op, self.cost],
                                    feed_dict={self.source_input: train_source_batch,
-                                            self.target_input: train_target_batch,
+                                            self.target_output: train_target_batch,
                                             self.target_sequence_length: train_target_lengths})
 
                 # show progress
@@ -128,13 +132,13 @@ class Seq2Seq(object):
                         valid_batch_logits = sess.run(
                             self.inference_sample_id,
                             feed_dict={self.source_input: valid_source_batch,
-                                       self.target_input: valid_target_batch,
+                                       self.target_output: valid_target_batch,
                                        self.target_sequence_length: valid_target_lengths}
                         )
 
                         # write out samples
                         if num_valid_batch % params["display_sample_per_n_batch"] == 0:
-                            sample_writer.write_inference_samples(valid_source_batch, valid_batch_logits)
+                            sample_writer.write_inference_samples(valid_source_batch, valid_batch_logits, params["n_samples2write"])
 
                         valid_acc = self.__get_accuracy(valid_target_batch, valid_batch_logits, params)
                         avg_acc += valid_acc
