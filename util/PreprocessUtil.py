@@ -44,3 +44,38 @@ class PreprocessUtil:
         :return:
         """
         return [seg.word for seg in PreprocessUtil.hanlp.segment(line.strip())]
+
+    @staticmethod
+    def preprocess(tokens, max_len_emoji):
+        """
+
+        :param tokens: list of str
+        :return:
+        """
+        emoji = []
+        new_tokens = []
+        for i in range(len(tokens)):
+            if tokens[i] == "[" and len(emoji) == 0:
+                emoji.append("[")
+            elif tokens[i] == "]" and 0 < len(emoji):
+                if len(emoji) <= max_len_emoji - 1:
+                    emoji.append("]")
+                    new_tokens.append("".join(emoji))
+                    emoji = []
+                # if len > max_len, not considered an emoji
+                else:
+                    new_tokens += emoji + ["]"]
+                    emoji = []
+            elif len(emoji) > 0:
+                emoji.append(tokens[i])
+            else:
+                new_tokens.append(tokens[i])
+
+        if len(emoji) > 0:
+            new_tokens += emoji
+
+        return new_tokens
+
+
+if __name__ == "__main__":
+    print(PreprocessUtil.preprocess(["a", "b", "[", "h","j","v","l", "]", "a", "b", "w", "]"], 5))
