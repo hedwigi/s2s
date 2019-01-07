@@ -6,7 +6,6 @@ venv/
 
 # data
 data/t*
-data/w*
 
 # model
 model/*data*
