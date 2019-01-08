@@ -9,7 +9,7 @@ class Dataset(object):
     start = None
 
     def __init__(self, source, target,
-                 source_vocab2id, target_vocab2id):
+                 source_vocab2id, target_vocab2id, reverse_target=False):
         """
 
         :param source: [[tok, tok], ...]
@@ -28,8 +28,10 @@ class Dataset(object):
         data = sorted(list(zip(source, target)), key=lambda st: len(st[0]))
         for s, t in data:
             self.source_ids.append([source_vocab2id[w] if w in source_vocab2id else params["unk_id"] for w in s])
-            self.target_ids.append([target_vocab2id[w] if w in target_vocab2id else params["unk_id"] for w in t] \
-                                   + [params["end_id"]])
+            target_id = [target_vocab2id[w] if w in target_vocab2id else params["unk_id"] for w in t] + [params["end_id"]]
+            if reverse_target:
+                target_id.reverse()
+            self.target_ids.append(target_id)
 
     def has_next(self, batch_size):
         return self.start + batch_size <= len(self.source_ids)

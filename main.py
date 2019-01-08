@@ -33,8 +33,8 @@ params["source_vocab_size"] = min(len(source_vocab2id), params["source_vocab_siz
 params["target_vocab_size"] = min(len(target_vocab2id), params["target_vocab_size"])
 id2source_vocab, id2target_vocab = train_loader.get_id2vocab()
 
-trainset = Dataset(train_x, train_y, source_vocab2id, target_vocab2id)
-validset = Dataset(valid_x, valid_y, source_vocab2id, target_vocab2id)
+trainset = Dataset(train_x, train_y, source_vocab2id, target_vocab2id, params["reverse_target"])
+validset = Dataset(valid_x, valid_y, source_vocab2id, target_vocab2id, params["reverse_target"])
 sample_writer = SampleWriter(id2target_vocab, id2source_vocab, params["end_id"], params["pad_id"])
 
 # test

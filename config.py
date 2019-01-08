@@ -18,12 +18,14 @@ params = {
     "start_id": 1,
     "end_id": 2,
     "unk_id": 3,  # since <UNK> should be created manually in DataLoader, should assign it with an id
-    "source_vocab_size":8000,
-    "encoding_embedding_size": 100,
-    "rnn_size": 128, # encoder decoder must have same number of layers and size
-    "num_layers": 3,
-    "target_vocab_size": 8000,
-    "decoding_embedding_size": 100,
+    "source_vocab_size":30000,
+    "encoding_embedding_size": 128,
+    "rnn_size": 256, # encoder decoder must have same number of layers and size
+    "num_layers": 1,
+    "target_vocab_size": 30000,
+    "decoding_embedding_size": 128,
+
+    "reverse_target": True,
 
 }
 

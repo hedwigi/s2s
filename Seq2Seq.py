@@ -14,40 +14,63 @@ class Seq2Seq(object):
         # *************** PLACEHOLDER & INPUT ***************
         # [batch_size, sequence_len]
         self.source_input = tf.placeholder(tf.int32, [None, None], name="source_input")
-        self.target_output = tf.placeholder(tf.int32, [None, None], name="target_output")
-
-        # Todo strided_slice
-        after_slice = tf.strided_slice(self.target_output, [0, 0], [params["batch_size"], -1], [1, 1])
-        self.target_input = tf.concat([tf.fill([params["batch_size"], 1], params["start_id"]), after_slice], 1)
+        self.target = tf.placeholder(tf.int32, [None, None], name="target")
 
         # TODO why need target_ids len???
         self.target_sequence_length = tf.placeholder(tf.int32, [None], name="target_sequence_length")
         max_target_len = tf.reduce_max(self.target_sequence_length)
+
+        if params["reverse_target"]:
+            # target input: <EOS> 3 2 1
+            target_input = self.target
+            # target output: 3 2 1 <S>
+            first_slices = tf.strided_slice(target_input, [0,1], [params["batch_size"], max_target_len], [1, 1])
+            self.target_output = tf.concat([first_slices, tf.fill([params["batch_size"], 1], params["start_id"])], 1)
+        else:
+            # target output: 1 2 3 <EOS>
+            self.target_output = self.target
+            # target input: <S> 1 2 3
+            after_slice = tf.strided_slice(self.target_output, [0, 0], [params["batch_size"], -1], [1, 1])
+            target_input = tf.concat([tf.fill([params["batch_size"], 1], params["start_id"]), after_slice], 1)
 
         # *************** GRAPH ****************
         # ------ RNN Encoder ------
         # TODO change to independent embedding
         embed = tf.contrib.layers.embed_sequence(self.source_input, vocab_size=params["source_vocab_size"],
                                                  embed_dim=params["encoding_embedding_size"])
+        # (uni-rnn)
         # list of separated rnn cells
-        l_rnn_cell = [tf.contrib.rnn.LSTMCell(params["rnn_size"]) for _ in range(params["num_layers"])]
-        # dropout
-        l_dropped_out_rnn_cell = [tf.contrib.rnn.DropoutWrapper(cell, params["keep_prob"]) for cell in l_rnn_cell]
+        # rnn_cell = tf.contrib.rnn.DropoutWrapper(tf.contrib.rnn.LSTMCell(params["rnn_size"]), params["keep_prob"])
+
         # stack n layers together
-        stacked_cells = tf.contrib.rnn.MultiRNNCell(l_dropped_out_rnn_cell)
+        # stacked_cells = tf.contrib.rnn.MultiRNNCell(l_dropped_out_rnn_cell)
         # unroll rnn_cell instance, output是通过主动提供输入tok得到的
-        _, encoder_state = tf.nn.dynamic_rnn(stacked_cells, embed, dtype=tf.float32)
+        # _, encoder_state = tf.nn.dynamic_rnn(rnn_cell, embed, dtype=tf.float32)
+
+        # (bi-rnn)
+        fw_rnn_cell = tf.contrib.rnn.LSTMCell(params["rnn_size"] / 2)
+        fw_dropped_out_rnn_cell = tf.contrib.rnn.DropoutWrapper(fw_rnn_cell, params["keep_prob"])
+
+        bw_rnn_cell = tf.contrib.rnn.LSTMCell(params["rnn_size"] / 2)
+        bw_dropped_out_rnn_cell = tf.contrib.rnn.DropoutWrapper(bw_rnn_cell, params["keep_prob"])
+
+        outputs, encoder_state = tf.nn.bidirectional_dynamic_rnn(
+            fw_dropped_out_rnn_cell, bw_dropped_out_rnn_cell, embed, dtype=tf.float32
+        )
+        # encoder_state = (fw_state, bw_state)
+        # fw_state = (c, h)
+        states = tf.concat([encoder_state[0], encoder_state[1]], axis=2)
+        encoder_state = tf.nn.rnn_cell.LSTMStateTuple(states[0], states[1])
 
         # ------ RNN Decoder -------
         dec_embeddings = tf.Variable(tf.random_uniform([params["target_vocab_size"], params["decoding_embedding_size"]]))
-        dec_embed_input = tf.nn.embedding_lookup(dec_embeddings, self.target_input)
+        dec_embed_input = tf.nn.embedding_lookup(dec_embeddings, target_input)
 
-        l_dec_rnn_cell = [tf.contrib.rnn.LSTMCell(params["rnn_size"]) for _ in range(params["num_layers"])]
-        dec_stacked_cells = tf.contrib.rnn.MultiRNNCell(l_dec_rnn_cell)
+        dec_rnn_cell = tf.contrib.rnn.LSTMCell(params["rnn_size"])
 
         with tf.variable_scope("decode", reuse=tf.AUTO_REUSE):
             # --- Train phase ---
-            dec_train_cells = tf.contrib.rnn.DropoutWrapper(dec_stacked_cells, output_keep_prob=params["keep_prob"])
+            dec_train_cells = tf.contrib.rnn.DropoutWrapper(dec_rnn_cell, output_keep_prob=params["keep_prob"])
             output_layer = tf.layers.Dense(params["target_vocab_size"])
 
             # dynamic_rnn只能使用提供的input得到output，（helper + decoder + dynamic_decode）可以自定义得到output的方式
@@ -64,10 +87,12 @@ class Seq2Seq(object):
 
             # --- Infer phase ---
             # TODO: another Dropout????
-            dec_infer_cells = tf.contrib.rnn.DropoutWrapper(dec_stacked_cells, output_keep_prob=params["keep_prob"])
+            dec_infer_cells = tf.contrib.rnn.DropoutWrapper(dec_rnn_cell, output_keep_prob=params["keep_prob"])
+            infer_start = params["end_id"] if params["reverse_target"] else params["start_id"]
+            infer_end = params["start_id"] if params["reverse_target"] else params["end_id"]
             gd_helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(dec_embeddings,
-                                                                 tf.fill([params["batch_size"]], params["start_id"]),
-                                                                 params["end_id"])
+                                                                 tf.fill([params["batch_size"]], infer_start),
+                                                                 infer_end)
             decoder_infer = tf.contrib.seq2seq.BasicDecoder(dec_infer_cells, gd_helper, encoder_state, output_layer)
             self.decoder_infer_outputs, _, _ = tf.contrib.seq2seq.dynamic_decode(decoder_infer,
                                                                                  impute_finished=True,
@@ -116,7 +141,7 @@ class Seq2Seq(object):
                 # train phase的logit与input长度一定相同，才能计算loss
                 _, train_batch_loss = sess.run([self.train_op, self.cost],
                                    feed_dict={self.source_input: train_source_batch,
-                                            self.target_output: train_target_batch,
+                                            self.target: train_target_batch,
                                             self.target_sequence_length: train_target_lengths})
 
                 # show progress
@@ -131,10 +156,10 @@ class Seq2Seq(object):
                         valid_source_lengths, valid_target_lengths = valid_dataset.next_batch(params["batch_size"])
 
                         # inference的结果长度不一定与input一致！
-                        valid_batch_logits = sess.run(
-                            self.inference_sample_id,
+                        valid_batch_logits, valid_target_output = sess.run(
+                            [self.inference_sample_id, self.target_output],
                             feed_dict={self.source_input: valid_source_batch,
-                                       self.target_output: valid_target_batch,
+                                       self.target: valid_target_batch,
                                        self.target_sequence_length: valid_target_lengths}
                         )
 
@@ -142,7 +167,7 @@ class Seq2Seq(object):
                         if num_valid_batch % params["display_sample_per_n_batch"] == 0:
                             sample_writer.write_inference_samples(valid_source_batch, valid_batch_logits, params["n_samples2write"])
 
-                        valid_acc = self.__get_accuracy(valid_target_batch, valid_batch_logits, params)
+                        valid_acc = self.__get_accuracy(valid_target_output, valid_batch_logits, params)
                         avg_acc += valid_acc
                     avg_acc /= num_valid_batch
 
