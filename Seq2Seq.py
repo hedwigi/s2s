@@ -16,7 +16,7 @@ class Seq2Seq(object):
         self.source_input = tf.placeholder(tf.int32, [None, None], name="source_input")
         self.target = tf.placeholder(tf.int32, [None, None], name="target")
 
-        # TODO why need target_ids len???
+        # if reverse_target, length doesn't include <S> at the end
         self.target_sequence_length = tf.placeholder(tf.int32, [None], name="target_sequence_length")
         max_target_len = tf.reduce_max(self.target_sequence_length)
 

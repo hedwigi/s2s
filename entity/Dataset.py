@@ -1,5 +1,4 @@
 import numpy as np
-from config import params
 
 
 class Dataset(object):
@@ -7,9 +6,13 @@ class Dataset(object):
     source_ids = None
     target_ids = None
     start = None
+    reverse_target = False
+    start_id, end_id, unk_id, pad_id = None, None, None, None
 
     def __init__(self, source, target,
-                 source_vocab2id, target_vocab2id, reverse_target=False):
+                 source_vocab2id, target_vocab2id,
+                 start_id, end_id, unk_id, pad_id,
+                 reverse_target=False):
         """
 
         :param source: [[tok, tok], ...]
@@ -21,15 +24,17 @@ class Dataset(object):
         self.source_ids = []
         self.target_ids = []
         self.start = 0
+        self.start_id, self.end_id, self.unk_id, self.pad_id = start_id, end_id, unk_id, pad_id
+        self.reverse_target = reverse_target
 
         # target_ids:<S>..<UNK>..<EOS>
 
         # sort data by source_ids length
         data = sorted(list(zip(source, target)), key=lambda st: len(st[0]))
         for s, t in data:
-            self.source_ids.append([source_vocab2id[w] if w in source_vocab2id else params["unk_id"] for w in s])
-            target_id = [target_vocab2id[w] if w in target_vocab2id else params["unk_id"] for w in t] + [params["end_id"]]
-            if reverse_target:
+            self.source_ids.append([source_vocab2id[w] if w in source_vocab2id else self.unk_id for w in s])
+            target_id = [target_vocab2id[w] if w in target_vocab2id else self.unk_id for w in t] + [self.end_id]
+            if self.reverse_target:
                 target_id.reverse()
             self.target_ids.append(target_id)
 
@@ -47,7 +52,8 @@ class Dataset(object):
             target_lengths = [len(sent) for sent in target_batch]
 
             self.start += batch_size
-            return self.padding(source_batch), self.padding(target_batch), \
+            add_start = True if self.reverse_target else False
+            return self.padding(source_batch), self.padding(target_batch, add_start), \
                    source_lengths, target_lengths
         else:
             return None, None, None, None
@@ -55,11 +61,12 @@ class Dataset(object):
     def reset(self):
         self.start = 0
 
-    def padding(self, l):
-        """
-
-        :param l:
-        :return:
-        """
+    def padding(self, l, add_start=False):
         max_len = max([len(sent) for sent in l])
-        return np.array([sent + [params["pad_id"]] * (max_len - len(sent)) for sent in l])
+
+        if add_start:
+            return np.array([sent + [self.start_id] + [self.pad_id] * (max_len - len(sent) - 1)
+                             if max_len > len(sent) else sent
+                             for sent in l
+                             ])
+        return np.array([sent + [self.pad_id] * (max_len - len(sent)) for sent in l])

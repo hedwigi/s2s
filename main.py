@@ -28,14 +28,23 @@ train_loader = DataLoader(path_train_x, path_train_y,
 
 train_x, train_y, valid_x, valid_y = train_loader.split_train_valid(params["valid_size"])
 source_vocab2id, target_vocab2id = train_loader.get_vocabs2id()
+
 # update params
 params["source_vocab_size"] = min(len(source_vocab2id), params["source_vocab_size"])
 params["target_vocab_size"] = min(len(target_vocab2id), params["target_vocab_size"])
 id2source_vocab, id2target_vocab = train_loader.get_id2vocab()
 
-trainset = Dataset(train_x, train_y, source_vocab2id, target_vocab2id, params["reverse_target"])
-validset = Dataset(valid_x, valid_y, source_vocab2id, target_vocab2id, params["reverse_target"])
-sample_writer = SampleWriter(id2target_vocab, id2source_vocab, params["end_id"], params["pad_id"])
+trainset = Dataset(train_x, train_y, source_vocab2id, target_vocab2id,
+                   params["start_id"], params["end_id"], params["unk_id"], params["pad_id"],
+                   params["reverse_target"])
+
+validset = Dataset(valid_x, valid_y, source_vocab2id, target_vocab2id,
+                   params["start_id"], params["end_id"], params["unk_id"], params["pad_id"],
+                   params["reverse_target"])
+
+sample_writer = SampleWriter(id2target_vocab, id2source_vocab,
+                             params["end_id"], params["pad_id"], params["start_id"],
+                             params["reverse_target"])
 
 # test
 # test_loader = DataLoader(path_test_x, path_test_y,
@@ -53,6 +62,7 @@ if __name__ == "__main__":
     sess = tf.Session()
     model = Seq2Seq(params)
     if mode == "train":
+        print("PARAMS:\n%s" % params)
         model.train(sess, trainset, validset, params, sample_writer)
 
     elif mode == "single":
