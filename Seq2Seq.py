@@ -151,9 +151,10 @@ class Seq2Seq(object):
         for i_epoch in range(params["epochs"]):
             train_dataset.reset()
             i_batch = 0
+            train_time = 0
             while train_dataset.has_next(params["batch_size"]):
                 i_batch += 1
-                start = time.clock()
+                start_train = time.clock()
                 train_source_batch, train_target_batch,\
                 _, train_target_lengths = train_dataset.next_batch(params["batch_size"])
                 # should run train_op to train, but only fetch cost
@@ -164,7 +165,7 @@ class Seq2Seq(object):
                                    feed_dict={self.source_input: train_source_batch,
                                             self.target: train_target_batch,
                                             self.target_sequence_length: train_target_lengths})
-                print("train a batch of %d in %f s" % (params["batch_size"], time.clock() - start))
+                train_time += time.clock() - start_train
 
                 # show progress
                 if i_batch % params["valid_step"] == 0:
@@ -172,6 +173,7 @@ class Seq2Seq(object):
                     # ---- VALID ----
                     avg_acc = 0
                     num_valid_batch = 0
+                    start_valid = 0
                     while valid_dataset.has_next(params["batch_size"]):
                         num_valid_batch += 1
                         valid_source_batch, valid_target_batch,\
@@ -194,9 +196,14 @@ class Seq2Seq(object):
                         valid_acc = self.__get_accuracy(valid_target_output, valid_batch_logits, params)
                         avg_acc += valid_acc
                     avg_acc /= num_valid_batch
+                    valid_time = time.clock() - start_valid
 
-                    print("Epoch %d, Batch %d - Valid acc: %f, Train batch loss: %f"
-                          % (i_epoch, i_batch, avg_acc, train_batch_loss))
+                    print("Epoch %d, Batch %d - Valid acc: %f, Train batch loss: %f, "
+                          "AVG train time per batch: %f s, AVG valid time per batch %f s"
+                          % (i_epoch, i_batch, avg_acc, train_batch_loss,
+                             train_time / i_batch,
+                             valid_time / num_valid_batch
+                             ))
 
                     # 在每次print的时候save，使得print的结果与保存的model相对应
                     saver.save(sess, params["model_dir"] + "/"
