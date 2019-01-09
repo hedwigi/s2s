@@ -60,10 +60,25 @@ if __name__ == "__main__":
     mode = "train"
 
     sess = tf.Session()
+    options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+    run_metadata = tf.RunMetadata()
+
     model = Seq2Seq(params)
     if mode == "train":
         print("PARAMS:\n%s" % params)
-        model.train(sess, trainset, validset, params, sample_writer)
+        bilstm_cell_params_1 = 4 * (params["rnn_size"] / 2) \
+                               * (params["rnn_size"] / 2 + params["encoding_embedding_size"] + 1)
+        bilstm_cell_params_o = 4 * (params["rnn_size"]/2) \
+                               * (params["rnn_size"] / 2 + params["rnn_size"] + 1)
+        rnn_cell_params_1 = 4 * params["rnn_size"] * (params["rnn_size"] + params["decoding_embedding_size"] + 1)
+        rnn_cell_params_o = 4 * params["rnn_size"] * (params["rnn_size"] + params["rnn_size"] + 1)
+
+        total_bilstm_size = bilstm_cell_params_1 * 2 + (params["num_layers"] - 1) * bilstm_cell_params_o * 2
+        total_rnn_size = rnn_cell_params_1 + (params["num_layers"] - 1) * rnn_cell_params_o
+        print("BiLSTM params size: %d" % total_bilstm_size)
+        print("RNN params size: %d" % total_rnn_size)
+        print("Total params size: %d" % (total_bilstm_size + total_rnn_size))
+        model.train(sess, trainset, validset, params, sample_writer, options, run_metadata)
 
     elif mode == "single":
         raw_question = "你好吗"

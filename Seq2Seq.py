@@ -1,5 +1,8 @@
 import tensorflow as tf
 import numpy as np
+import time
+from util.Monitor import Monitor
+from tensorflow.python.client import timeline
 
 tf.set_random_seed(1)
 
@@ -21,9 +24,9 @@ class Seq2Seq(object):
         max_target_len = tf.reduce_max(self.target_sequence_length)
 
         if params["reverse_target"]:
-            # target input: <EOS> 3 2 1
+            # target input: <EOS> 3 2 1 <S> <PAD>
             target_input = self.target
-            # target output: 3 2 1 <S>
+            # target output: 3 2 1 <S> <PAD> <PAD>
             first_slices = tf.strided_slice(target_input, [0,1], [params["batch_size"], max_target_len], [1, 1])
             self.target_output = tf.concat([first_slices, tf.fill([params["batch_size"], 1], params["start_id"])], 1)
         else:
@@ -48,29 +51,39 @@ class Seq2Seq(object):
         # _, encoder_state = tf.nn.dynamic_rnn(rnn_cell, embed, dtype=tf.float32)
 
         # (bi-rnn)
-        fw_rnn_cell = tf.contrib.rnn.LSTMCell(params["rnn_size"] / 2)
-        fw_dropped_out_rnn_cell = tf.contrib.rnn.DropoutWrapper(fw_rnn_cell, params["keep_prob"])
+        input = embed
+        encoder_states = []
+        for _ in range(params["num_layers"]):
+            with tf.variable_scope(None, default_name="stacked_bilstm"):
+                fw_rnn_cell = tf.contrib.rnn.LSTMCell(params["rnn_size"] / 2)
+                fw_dropped_out_rnn_cell = tf.contrib.rnn.DropoutWrapper(fw_rnn_cell, params["keep_prob"])
 
-        bw_rnn_cell = tf.contrib.rnn.LSTMCell(params["rnn_size"] / 2)
-        bw_dropped_out_rnn_cell = tf.contrib.rnn.DropoutWrapper(bw_rnn_cell, params["keep_prob"])
+                bw_rnn_cell = tf.contrib.rnn.LSTMCell(params["rnn_size"] / 2)
+                bw_dropped_out_rnn_cell = tf.contrib.rnn.DropoutWrapper(bw_rnn_cell, params["keep_prob"])
 
-        outputs, encoder_state = tf.nn.bidirectional_dynamic_rnn(
-            fw_dropped_out_rnn_cell, bw_dropped_out_rnn_cell, embed, dtype=tf.float32
-        )
-        # encoder_state = (fw_state, bw_state)
-        # fw_state = (c, h)
-        states = tf.concat([encoder_state[0], encoder_state[1]], axis=2)
-        encoder_state = tf.nn.rnn_cell.LSTMStateTuple(states[0], states[1])
+                # state = (fw_state, bw_state)
+                # fw_state = (c, h)
+                outputs, state = tf.nn.bidirectional_dynamic_rnn(
+                    fw_dropped_out_rnn_cell, bw_dropped_out_rnn_cell, input, dtype=tf.float32
+                )
+
+                # update
+                input = tf.concat(outputs, 2)
+                states = tf.concat([state[0], state[1]], axis=2)
+                encoder_state = tf.nn.rnn_cell.LSTMStateTuple(states[0], states[1])
+                encoder_states.append(encoder_state)
+        encoder_states = tuple(encoder_states)
 
         # ------ RNN Decoder -------
         dec_embeddings = tf.Variable(tf.random_uniform([params["target_vocab_size"], params["decoding_embedding_size"]]))
         dec_embed_input = tf.nn.embedding_lookup(dec_embeddings, target_input)
 
-        dec_rnn_cell = tf.contrib.rnn.LSTMCell(params["rnn_size"])
-
+        l_dec_rnn_cell = [tf.contrib.rnn.LSTMCell(params["rnn_size"]) for i in range(params["num_layers"])]
+        dec_stacked_cells = tf.contrib.rnn.MultiRNNCell(l_dec_rnn_cell)
+        # reuse: shared rnn cells
         with tf.variable_scope("decode", reuse=tf.AUTO_REUSE):
             # --- Train phase ---
-            dec_train_cells = tf.contrib.rnn.DropoutWrapper(dec_rnn_cell, output_keep_prob=params["keep_prob"])
+            dec_train_cells = tf.contrib.rnn.DropoutWrapper(dec_stacked_cells, output_keep_prob=params["keep_prob"])
             output_layer = tf.layers.Dense(params["target_vocab_size"])
 
             # dynamic_rnn只能使用提供的input得到output，（helper + decoder + dynamic_decode）可以自定义得到output的方式
@@ -78,7 +91,7 @@ class Seq2Seq(object):
             helper = tf.contrib.seq2seq.TrainingHelper(dec_embed_input, self.target_sequence_length)
 
             # 核心decoder，使用helper的input和rnn_cell，以及输出层，返回单次的RNN output
-            decoder_train = tf.contrib.seq2seq.BasicDecoder(dec_train_cells, helper, encoder_state, output_layer)
+            decoder_train = tf.contrib.seq2seq.BasicDecoder(dec_train_cells, helper, encoder_states, output_layer)
 
             # 使用核心decoder，提供用来unroll的大循环
             self.decoder_train_outputs, _, _ = tf.contrib.seq2seq.dynamic_decode(decoder_train,
@@ -87,13 +100,13 @@ class Seq2Seq(object):
 
             # --- Infer phase ---
             # TODO: another Dropout????
-            dec_infer_cells = tf.contrib.rnn.DropoutWrapper(dec_rnn_cell, output_keep_prob=params["keep_prob"])
+            dec_infer_cells = tf.contrib.rnn.DropoutWrapper(dec_stacked_cells, output_keep_prob=params["keep_prob"])
             infer_start = params["end_id"] if params["reverse_target"] else params["start_id"]
             infer_end = params["start_id"] if params["reverse_target"] else params["end_id"]
             gd_helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(dec_embeddings,
                                                                  tf.fill([params["batch_size"]], infer_start),
                                                                  infer_end)
-            decoder_infer = tf.contrib.seq2seq.BasicDecoder(dec_infer_cells, gd_helper, encoder_state, output_layer)
+            decoder_infer = tf.contrib.seq2seq.BasicDecoder(dec_infer_cells, gd_helper, encoder_states, output_layer)
             self.decoder_infer_outputs, _, _ = tf.contrib.seq2seq.dynamic_decode(decoder_infer,
                                                                                  impute_finished=True,
                                                                                  maximum_iterations=max_target_len)
@@ -118,7 +131,10 @@ class Seq2Seq(object):
             clipped_gradients = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gradients if grad is not None]
             self.train_op = optimizer.apply_gradients(clipped_gradients)
 
-    def train(self, sess, train_dataset, valid_dataset, params, sample_writer):
+        vars = tf.trainable_variables()
+        Monitor.print_params(vars)
+
+    def train(self, sess, train_dataset, valid_dataset, params, sample_writer, options, run_metadata):
         """
 
         :param sess:
@@ -126,6 +142,8 @@ class Seq2Seq(object):
         :param valid_dataset:
         :param params:
         :param sample_writer:
+        :param options:
+        :param run_metadata:
         :return:
         """
         sess.run(tf.global_variables_initializer())
@@ -135,14 +153,18 @@ class Seq2Seq(object):
             i_batch = 0
             while train_dataset.has_next(params["batch_size"]):
                 i_batch += 1
+                start = time.clock()
                 train_source_batch, train_target_batch,\
                 _, train_target_lengths = train_dataset.next_batch(params["batch_size"])
                 # should run train_op to train, but only fetch cost
                 # train phase的logit与input长度一定相同，才能计算loss
                 _, train_batch_loss = sess.run([self.train_op, self.cost],
+                                               options=options,
+                                               run_metadata=run_metadata,
                                    feed_dict={self.source_input: train_source_batch,
                                             self.target: train_target_batch,
                                             self.target_sequence_length: train_target_lengths})
+                print("train a batch of %d in %f s" % (params["batch_size"], time.clock() - start))
 
                 # show progress
                 if i_batch % params["valid_step"] == 0:
@@ -158,6 +180,8 @@ class Seq2Seq(object):
                         # inference的结果长度不一定与input一致！
                         valid_batch_logits, valid_target_output = sess.run(
                             [self.inference_sample_id, self.target_output],
+                            options=options,
+                            run_metadata=run_metadata,
                             feed_dict={self.source_input: valid_source_batch,
                                        self.target: valid_target_batch,
                                        self.target_sequence_length: valid_target_lengths}
@@ -178,6 +202,11 @@ class Seq2Seq(object):
                     saver.save(sess, params["model_dir"] + "/"
                                + params["model_base"] + "-" + str(i_epoch) + "_" + str(i_batch),
                                )
+
+        fetched_timeline = timeline.Timeline(run_metadata.step_stats)
+        chrome_trace = fetched_timeline.generate_chrome_trace_format()
+        with open('timeline_01.json', 'w') as f:
+            f.write(chrome_trace)
 
     def infer(self, sess, sequence, params):
         """

@@ -10,7 +10,7 @@ params = {
     "display_sample_per_n_batch": 50,
     "model_dir": "./model",
     "model_base": "s2s",
-    "valid_size": 0.2,
+    "valid_size": 0.1,
     "n_samples2write": 10,
 
     # Model Params
@@ -18,14 +18,14 @@ params = {
     "start_id": 1,
     "end_id": 2,
     "unk_id": 3,  # since <UNK> should be created manually in DataLoader, should assign it with an id
-    "source_vocab_size":30000,
+    "source_vocab_size": 30000,
     "encoding_embedding_size": 128,
     "rnn_size": 256, # encoder decoder must have same number of layers and size
-    "num_layers": 1,
+    "num_layers": 3,
     "target_vocab_size": 30000,
     "decoding_embedding_size": 128,
 
-    "reverse_target": True,
+    "reverse_target": False,
 
 }
 
