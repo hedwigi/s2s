@@ -81,9 +81,10 @@ if __name__ == "__main__":
         model.train(sess, trainset, validset, params, sample_writer, options, run_metadata)
 
     elif mode == "single":
-        raw_question = "你好吗"
+        raw_question = "they like pears , apples , and mangoes ."
         question_in_id = PreprocessUtil.words2idseq(raw_question, source_vocab2id)
-        response_in_id = model.infer(sess, question_in_id, params)
+        timeline_fname = "timeline_infer_1s"
+        response_in_id = model.infer(sess, question_in_id, params, options, run_metadata, timeline_fname)
         response = PreprocessUtil.idseq2words(response_in_id, id2target_vocab)
         print("Q: %s\n" % raw_question)
         print("R: %s\n" % response)
