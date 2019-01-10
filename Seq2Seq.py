@@ -173,7 +173,7 @@ class Seq2Seq(object):
                     # ---- VALID ----
                     avg_acc = 0
                     num_valid_batch = 0
-                    start_valid = 0
+                    start_valid = time.clock()
                     while valid_dataset.has_next(params["batch_size"]):
                         num_valid_batch += 1
                         valid_source_batch, valid_target_batch,\
@@ -215,7 +215,7 @@ class Seq2Seq(object):
         with open('timeline_01.json', 'w') as f:
             f.write(chrome_trace)
 
-    def infer(self, sess, sequence, params):
+    def infer(self, sess, sequence, params, options, run_metadata, timeline_fname):
         """
 
         :param sequence: list of int
@@ -225,7 +225,15 @@ class Seq2Seq(object):
         saver = tf.train.Saver()
         saver.restore(sess, tf.train.latest_checkpoint(params["model_dir"]))
         # 若需要返回的结果不依赖于某个输入，feed_dict可以不给
-        output_in_id = sess.run(self.inference_sample_id, feed_dict={self.source_input: [sequence]})[0]
+        output_in_id = sess.run(self.inference_sample_id,
+                                options=options,
+                                run_metadata=run_metadata,
+                                feed_dict={self.source_input: [sequence] * params["batch_size"],
+                                                                     self.target_sequence_length: [10] * params["batch_size"]})[0]
+        fetched_timeline = timeline.Timeline(run_metadata.step_stats)
+        chrome_trace = fetched_timeline.generate_chrome_trace_format()
+        with open(timeline_fname + '.json', 'w') as f:
+            f.write(chrome_trace)
         return output_in_id
 
     def __get_accuracy(self, true_batch, pred_batch_logits, params):
