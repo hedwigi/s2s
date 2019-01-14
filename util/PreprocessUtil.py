@@ -23,7 +23,8 @@ class PreprocessUtil:
         :param target_vocab2id:
         :return:
         """
-        tokens = [seg.word for seg in PreprocessUtil.hanlp.segment(raw_sentence)]
+        # tokens = [seg.word for seg in PreprocessUtil.hanlp.segment(raw_sentence)]
+        tokens = raw_sentence.split()
         return [source_vocab2id[tok] if tok in source_vocab2id else "<UNK>" for tok in tokens]
 
     @staticmethod
@@ -46,36 +47,71 @@ class PreprocessUtil:
         return [seg.word for seg in PreprocessUtil.hanlp.segment(line.strip())]
 
     @staticmethod
-    def preprocess(tokens, max_len_emoji):
+    def tokenize_with_pos(line):
         """
 
-        :param tokens: list of str
+        :param line:
         :return:
         """
+        token_pos = [(seg.word, seg.nature.toString()) for seg in PreprocessUtil.hanlp.segment(line.strip())]
+        tokens = [t for t, p in token_pos]
+        pos = [p for t, p in token_pos]
+        return tokens, pos
+
+    @staticmethod
+    def preprocess(tokens, postags=None, max_len_emoji=5):
+
+        if not postags:
+            postags = ["" for t in tokens]
+
         emoji = []
         new_tokens = []
+        emoji_pos = []
+        new_postags = []
         for i in range(len(tokens)):
             if tokens[i] == "[" and len(emoji) == 0:
-                emoji.append("[")
+                emoji.append(tokens[i])
+                emoji_pos.append(postags[i])
             elif tokens[i] == "]" and 0 < len(emoji):
                 if len(emoji) <= max_len_emoji - 1:
-                    emoji.append("]")
+                    emoji.append(tokens[i])
                     new_tokens.append("".join(emoji))
                     emoji = []
+
+                    new_postags.append("xx")
+                    emoji_pos = []
+
                 # if len > max_len, not considered an emoji
                 else:
-                    new_tokens += emoji + ["]"]
+                    new_tokens += emoji + [tokens[i]]
                     emoji = []
+
+                    new_postags += emoji_pos + [postags[i]]
+                    emoji_pos = []
             elif len(emoji) > 0:
                 emoji.append(tokens[i])
+                emoji_pos.append(postags[i])
             else:
                 new_tokens.append(tokens[i])
+                new_postags.append(postags[i])
 
         if len(emoji) > 0:
             new_tokens += emoji
+            new_postags += emoji_pos
 
-        return new_tokens
+        assert len(new_tokens) == len(new_postags)
+        return new_tokens, new_postags
+
+    @staticmethod
+    def ngrams(tokens, ngram_size):
+        ngrams = []
+        for win in range(1, ngram_size + 1):
+            for i in range(len(tokens) - win + 1):
+                ngrams.append("".join(tokens[i: i + win]))
+        return ngrams
 
 
 if __name__ == "__main__":
+    PreprocessUtil.init()
     print(PreprocessUtil.preprocess(["a", "b", "[", "h","j","v","l", "]", "a", "b", "w", "]"], 5))
+    print(PreprocessUtil.ngrams("你在敷衍我吗？", 3))
