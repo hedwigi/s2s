@@ -164,9 +164,9 @@ if __name__ == "__main__":
 
     redo_cluster = True
     dirdata = "/Users/wangyuqian/work/data"
-    dirres = os.path.dirname(__file__)
+    dirres = os.path.join(os.path.dirname(__file__), "data")
 
-    PUNC = open(os.path.join(os.path.dirname(__file__), "../resource/Punctuation"), "r").readline().strip()
+    PUNC = open(os.path.join(os.path.dirname(__file__), "resource/Punctuation"), "r").readline().strip()
 
     # Params
     pathin = os.path.join(dirdata, "multi_1_4.4_100w.data") if redo_cluster else None
