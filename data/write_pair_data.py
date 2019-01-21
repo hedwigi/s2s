@@ -59,8 +59,8 @@ class PairDataWriter:
                                     if nd <= params["max_num_data"]:
                                         if nd % 5000 == 0:
                                             print("written %d dialogs" % (nd))
-                                        if params["multi_turn"]:
-                                            fs.write(" ".join(context_toks))
+                                        if params["multi_turn"] and len(context_toks) > 0:
+                                            fs.write(" ".join(context_toks) + " ")
 
                                         fs.write(" ".join(s) + "\n")
                                         ft.write(" ".join(t) + "\n")
@@ -90,15 +90,15 @@ if __name__ == "__main__":
 
     infile = "/Users/wangyuqian/work/data/multi_1_4.4_100w.data"
     # infile = "ttt"
-    outfile_source = "train_x_single"
-    outfile_target = "train_y_single"
+    outfile_source = "train_x_multi"
+    outfile_target = "train_y_multi"
 
     params = {
         "max_num_data": 1000000,
         "min_len_utterance": 2,
         "max_len_utterance": 15,
         "max_len_emoji": 5,
-        "multi_turn": False,
+        "multi_turn": True,
         "max_context_size": 5, # not including source
     }
 
