@@ -57,6 +57,8 @@ class PairDataWriter:
                                     and params["min_len_utterance"] <= len(t) <= params["max_len_utterance"]:
                                     nd += 1
                                     if nd <= params["max_num_data"]:
+                                        if nd % 5000 == 0:
+                                            print("written %d dialogs" % (nd))
                                         if params["multi_turn"]:
                                             fs.write(" ".join(context_toks))
 
