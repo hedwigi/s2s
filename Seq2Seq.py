@@ -19,22 +19,29 @@ class Seq2Seq(object):
         self.source_input = tf.placeholder(tf.int32, [None, None], name="source_input")
         self.target = tf.placeholder(tf.int32, [None, None], name="target")
 
+        self.source_sequence_length = tf.placeholder(tf.int32, [None], name="source_sequence_length")
         # if reverse_target, length doesn't include <S> at the end
         self.target_sequence_length = tf.placeholder(tf.int32, [None], name="target_sequence_length")
+
+        # 获取max target len
         max_target_len = tf.reduce_max(self.target_sequence_length)
 
+        # 获取可变的batch_size
+        batch_size = tf.shape(self.source_input)[0]
+
         if params["reverse_target"]:
-            # target input: <EOS> 3 2 1 <S> <PAD>
+            # target input: <EOS> 4 3 2 <S> <PAD>, <EOS> 6 5 4 3 2,
             target_input = self.target
-            # target output: 3 2 1 <S> <PAD> <PAD>
-            first_slices = tf.strided_slice(target_input, [0,1], [params["batch_size"], max_target_len], [1, 1])
-            self.target_output = tf.concat([first_slices, tf.fill([params["batch_size"], 1], params["start_id"])], 1)
+            # target output: 3 2 1 <S> <PAD> <S>, 6 5 4 3 2 <S>
+            # target seq len: 4,             6
+            first_slices = tf.strided_slice(target_input, [0,1], [batch_size, max_target_len], [1, 1])
+            self.target_output = tf.concat([first_slices, tf.fill([batch_size, 1], params["start_id"])], 1)
         else:
             # target output: 1 2 3 <EOS>
             self.target_output = self.target
             # target input: <S> 1 2 3
-            after_slice = tf.strided_slice(self.target_output, [0, 0], [params["batch_size"], -1], [1, 1])
-            target_input = tf.concat([tf.fill([params["batch_size"], 1], params["start_id"]), after_slice], 1)
+            after_slice = tf.strided_slice(self.target_output, [0, 0], [batch_size, -1], [1, 1])
+            target_input = tf.concat([tf.fill([batch_size, 1], params["start_id"]), after_slice], 1)
 
         # *************** GRAPH ****************
         # ------ RNN Encoder ------
@@ -64,7 +71,7 @@ class Seq2Seq(object):
                 # state = (fw_state, bw_state)
                 # fw_state = (c, h)
                 outputs, state = tf.nn.bidirectional_dynamic_rnn(
-                    fw_dropped_out_rnn_cell, bw_dropped_out_rnn_cell, input, dtype=tf.float32
+                    fw_dropped_out_rnn_cell, bw_dropped_out_rnn_cell, input, self.source_sequence_length, dtype=tf.float32
                 )
 
                 # update
@@ -104,7 +111,7 @@ class Seq2Seq(object):
             infer_start = params["end_id"] if params["reverse_target"] else params["start_id"]
             infer_end = params["start_id"] if params["reverse_target"] else params["end_id"]
             gd_helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(dec_embeddings,
-                                                                 tf.fill([params["batch_size"]], infer_start),
+                                                                 tf.fill([batch_size], infer_start),
                                                                  infer_end)
             decoder_infer = tf.contrib.seq2seq.BasicDecoder(dec_infer_cells, gd_helper, encoder_states, output_layer)
             self.decoder_infer_outputs, _, _ = tf.contrib.seq2seq.dynamic_decode(decoder_infer,
@@ -156,13 +163,14 @@ class Seq2Seq(object):
                 i_batch += 1
                 start_train = time.clock()
                 train_source_batch, train_target_batch,\
-                _, train_target_lengths = train_dataset.next_batch(params["batch_size"])
+                train_source_lengths, train_target_lengths = train_dataset.next_batch(params["batch_size"])
                 # should run train_op to train, but only fetch cost
                 # train phase的logit与input长度一定相同，才能计算loss
                 _, train_batch_loss = sess.run([self.train_op, self.cost],
                                                options=options,
                                                run_metadata=run_metadata,
                                    feed_dict={self.source_input: train_source_batch,
+                                              self.source_sequence_length: train_source_lengths,
                                             self.target: train_target_batch,
                                             self.target_sequence_length: train_target_lengths})
                 train_time += time.clock() - start_train
@@ -185,6 +193,7 @@ class Seq2Seq(object):
                             options=options,
                             run_metadata=run_metadata,
                             feed_dict={self.source_input: valid_source_batch,
+                                       self.source_sequence_length: valid_source_lengths,
                                        self.target: valid_target_batch,
                                        self.target_sequence_length: valid_target_lengths}
                         )
@@ -228,8 +237,9 @@ class Seq2Seq(object):
         output_in_id = sess.run(self.inference_sample_id,
                                 options=options,
                                 run_metadata=run_metadata,
-                                feed_dict={self.source_input: [sequence] * params["batch_size"],
-                                                                     self.target_sequence_length: [10] * params["batch_size"]})[0]
+                                feed_dict={self.source_input: [sequence],
+                                           self.source_sequence_length: [len(sequence)],
+                                           self.target_sequence_length: [10]})[0]
         fetched_timeline = timeline.Timeline(run_metadata.step_stats)
         chrome_trace = fetched_timeline.generate_chrome_trace_format()
         with open(timeline_fname + '.json', 'w') as f:
