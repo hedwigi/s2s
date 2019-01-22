@@ -1,11 +1,10 @@
 import os
 
 
-class DataLoader(object):
-    all_x = None
-    all_y = None
+class VocabLoader(object):
     source_vocab2id = None
     target_vocab2id = None
+    id2source_vocab = None
     id2target_vocab = None
 
     def __init__(self, path_x, path_y,
@@ -14,24 +13,29 @@ class DataLoader(object):
                  save_vocab,
                  vocab_name):
 
-        self.all_x = []
+        # ------ SOURCE VOCAB ------
+        # sort vocab by frequency, keep top K in vocab
         source_vocab_count = {}
-        self.load_data_n_vocab(path_x, self.all_x, source_vocab_count)
-        source_vocab_count = sorted(source_vocab_count.items(), key=lambda v_c: v_c[1], reverse=True)[:source_vocab_size - len(default_vocab)]
+        self.load_vocab(path_x, source_vocab_count)
+        source_vocab_count = sorted(source_vocab_count.items(), key=lambda v_c: v_c[1], reverse=True)[
+                             :source_vocab_size - len(default_vocab)]
+        # map vocab to id and vice-versa, keep special ids for default vocab
         self.source_vocab2id = {v_c[0]: i + len(default_vocab) for i, v_c in enumerate(source_vocab_count)}
         self.source_vocab2id.update(default_vocab)
         self.id2source_vocab = {i: v for v, i in self.source_vocab2id.items()}
-        source_vocab_count = dict(source_vocab_count)
 
-        self.all_y = []
+        # ------ TARGET VOCAB ------
         target_vocab_count = {}
-        self.load_data_n_vocab(path_y, self.all_y, target_vocab_count)
-        target_vocab_count = sorted(target_vocab_count.items(), key=lambda v_c: v_c[1], reverse=True)[:target_vocab_size - len(default_vocab)]
+        self.load_vocab(path_y, target_vocab_count)
+        target_vocab_count = sorted(target_vocab_count.items(), key=lambda v_c: v_c[1], reverse=True)[
+                             :target_vocab_size - len(default_vocab)]
         self.target_vocab2id = {v_c[0]: i + len(default_vocab) for i, v_c in enumerate(target_vocab_count)}
         self.target_vocab2id.update(default_vocab)
         self.id2target_vocab = {i: v for v, i in self.target_vocab2id.items()}
-        target_vocab_count = dict(target_vocab_count)
 
+        # write vocab to file
+        source_vocab_count = dict(source_vocab_count)
+        target_vocab_count = dict(target_vocab_count)
         if save_vocab:
             dir = os.path.dirname(path_x)
             with open(os.path.join(dir, vocab_name + ".source_vocab"), "w") as fs:
@@ -44,38 +48,13 @@ class DataLoader(object):
                     count = target_vocab_count[v] if v in target_vocab_count else None
                     ft.write(v + " " + str(count) + "\n")
 
-    @staticmethod
-    def load_without_vocab(pathfile):
-        data = []
-        with open(pathfile, "r") as fin:
-            line = fin.readline()
-            while line:
-                data.append(line.strip().split(" "))
-                line = fin.readline()
-        return data
-
-    def split_train_valid(self, valid_size):
-        num_valid = int(len(self.all_x) * valid_size)
-        train_x, valid_x = self.all_x[num_valid:], self.all_x[:num_valid]
-        train_y, valid_y = self.all_y[num_valid:], self.all_y[:num_valid]
-        print("train size: %d, valid size: %d" % (len(train_x), len(valid_x)))
-        return train_x, train_y, valid_x, valid_y
-
     def get_vocab2id(self):
         return self.source_vocab2id, self.target_vocab2id
 
     def get_id2vocab(self):
         return self.id2source_vocab, self.id2target_vocab
 
-    def load_data_n_vocab(self, pathfile, data_list, vocab_count):
-        """
-
-        :param pathfile:
-        :param data_list: [] -> [[tok, tok, ...], ]
-        :param vocab_count:
-        :param default_vocab:
-        :return:
-        """
+    def load_vocab(self, pathfile, vocab_count):
         with open(pathfile, "r") as fx:
             line = fx.readline()
             while line:
@@ -84,8 +63,4 @@ class DataLoader(object):
                     if tok not in vocab_count:
                         vocab_count[tok] = 0
                     vocab_count[tok] += 1
-                data_list.append(tokens)
                 line = fx.readline()
-
-    def get_x_y(self):
-        return self.all_x, self.all_y

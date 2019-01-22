@@ -2,49 +2,56 @@ import os
 import tensorflow as tf
 from config import params
 from Seq2Seq import Seq2Seq
-from entity.Dataset import Dataset
+from entity.BatchIterator import BatchIterator
 from util.SampleWriter import SampleWriter
-from util.DataLoader import DataLoader
+from util.VocabLoader import VocabLoader
 from util.PreprocessUtil import PreprocessUtil
 
 
 # **** PARAM ****
 dirdata = os.path.join(os.path.dirname(__file__), "data")
-path_train_x = os.path.join(dirdata, "train_x_small")
-path_train_y = os.path.join(dirdata, "train_y_small")
-path_valid_x = os.path.join(dirdata, "valid_x_small")
-path_valid_y = os.path.join(dirdata, "valid_y_small")
+path_train_x_orig = os.path.join(dirdata, "train_x_small")
+path_train_y_orig = os.path.join(dirdata, "train_y_small")
+path_valid_x_orig = os.path.join(dirdata, "valid_x_small")
+path_valid_y_orig = os.path.join(dirdata, "valid_y_small")
 
+# **** SORT BY LENGTH ****
+path_train_x = path_train_x_orig + ".sorted"
+path_train_y = path_train_y_orig + ".sorted"
+path_valid_x = path_valid_x_orig + ".sorted"
+path_valid_y = path_valid_y_orig + ".sorted"
+
+PreprocessUtil.sortby_len_rewrite(path_train_x_orig, path_train_y_orig,
+                                  path_train_x, path_train_y)
+PreprocessUtil.sortby_len_rewrite(path_valid_x_orig, path_valid_y_orig,
+                                  path_valid_x, path_valid_y)
+
+# **** DATA PROCESS ****
 default_vocab = {"<PAD>": params["pad_id"],
                   "<S>": params["start_id"],
                   "<EOS>": params["end_id"],
                   "<UNK>": params["unk_id"]}
 
-train_loader = DataLoader(path_train_x, path_train_y,
-                          params["source_vocab_size"], params["target_vocab_size"],
-                          default_vocab,
-                          True,
+vocab_loader = VocabLoader(path_train_x, path_train_y,
+                           params["source_vocab_size"], params["target_vocab_size"],
+                           default_vocab,
+                           True,
                           "train")
 
-train_x, train_y = train_loader.get_x_y()
-valid_x = DataLoader.load_without_vocab(path_valid_x)
-valid_y = DataLoader.load_without_vocab(path_valid_y)
-# train_x, train_y, valid_x, valid_y = train_loader.split_train_valid(params["valid_size"])
-
-source_vocab2id, target_vocab2id = train_loader.get_vocab2id()
+source_vocab2id, target_vocab2id = vocab_loader.get_vocab2id()
 
 # update params
 params["source_vocab_size"] = min(len(source_vocab2id), params["source_vocab_size"])
 params["target_vocab_size"] = min(len(target_vocab2id), params["target_vocab_size"])
-id2source_vocab, id2target_vocab = train_loader.get_id2vocab()
+id2source_vocab, id2target_vocab = vocab_loader.get_id2vocab()
 
-trainset = Dataset(train_x, train_y, source_vocab2id, target_vocab2id,
-                   params["start_id"], params["end_id"], params["unk_id"], params["pad_id"],
-                   params["reverse_target"])
+train_iter = BatchIterator(path_train_x, path_train_y, source_vocab2id, target_vocab2id,
+                       params["start_id"], params["end_id"], params["unk_id"], params["pad_id"],
+                       params["reverse_target"])
 
-validset = Dataset(valid_x, valid_y, source_vocab2id, target_vocab2id,
-                   params["start_id"], params["end_id"], params["unk_id"], params["pad_id"],
-                   params["reverse_target"])
+valid_iter = BatchIterator(path_valid_x, path_valid_y, source_vocab2id, target_vocab2id,
+                     params["start_id"], params["end_id"], params["unk_id"], params["pad_id"],
+                     params["reverse_target"])
 
 sample_writer = SampleWriter(id2target_vocab, id2source_vocab,
                              params["end_id"], params["pad_id"], params["start_id"],
@@ -74,7 +81,7 @@ if __name__ == "__main__":
         print("BiLSTM params size: %d" % total_bilstm_size)
         print("RNN params size: %d" % total_rnn_size)
         print("Total params size: %d" % (total_bilstm_size + total_rnn_size))
-        model.train(sess, trainset, validset, params, sample_writer, options, run_metadata)
+        model.train(sess, train_iter, valid_iter, params, sample_writer, options, run_metadata)
 
     elif mode == "single":
         raw_question = "they like pears , apples , and mangoes ."
