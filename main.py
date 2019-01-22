@@ -10,10 +10,10 @@ from util.PreprocessUtil import PreprocessUtil
 
 # **** PARAM ****
 dirdata = os.path.join(os.path.dirname(__file__), "data")
-path_train_x = os.path.join(dirdata, "train_x")
-path_train_y = os.path.join(dirdata, "train_y")
-path_test_x = os.path.join(dirdata, "test_x")
-path_test_y = os.path.join(dirdata, "test_y")
+path_train_x = os.path.join(dirdata, "train_x_small")
+path_train_y = os.path.join(dirdata, "train_y_small")
+path_valid_x = os.path.join(dirdata, "valid_x_small")
+path_valid_y = os.path.join(dirdata, "valid_y_small")
 
 default_vocab = {"<PAD>": params["pad_id"],
                   "<S>": params["start_id"],
@@ -26,8 +26,12 @@ train_loader = DataLoader(path_train_x, path_train_y,
                           True,
                           "train")
 
-train_x, train_y, valid_x, valid_y = train_loader.split_train_valid(params["valid_size"])
-source_vocab2id, target_vocab2id = train_loader.get_vocabs2id()
+train_x, train_y = train_loader.get_x_y()
+valid_x = DataLoader.load_without_vocab(path_valid_x)
+valid_y = DataLoader.load_without_vocab(path_valid_y)
+# train_x, train_y, valid_x, valid_y = train_loader.split_train_valid(params["valid_size"])
+
+source_vocab2id, target_vocab2id = train_loader.get_vocab2id()
 
 # update params
 params["source_vocab_size"] = min(len(source_vocab2id), params["source_vocab_size"])
@@ -45,14 +49,6 @@ validset = Dataset(valid_x, valid_y, source_vocab2id, target_vocab2id,
 sample_writer = SampleWriter(id2target_vocab, id2source_vocab,
                              params["end_id"], params["pad_id"], params["start_id"],
                              params["reverse_target"])
-
-# test
-# test_loader = DataLoader(path_test_x, path_test_y,
-#                           params["source_vocab_size"], params["target_vocab_size"],
-#                           default_vocab,
-#                           True,
-#                          "test")
-# test_x, test_y, _, _ = test_loader.split_train_valid(0)
 
 
 if __name__ == "__main__":

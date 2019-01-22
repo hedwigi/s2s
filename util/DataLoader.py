@@ -44,6 +44,16 @@ class DataLoader(object):
                     count = target_vocab_count[v] if v in target_vocab_count else None
                     ft.write(v + " " + str(count) + "\n")
 
+    @staticmethod
+    def load_without_vocab(pathfile):
+        data = []
+        with open(pathfile, "r") as fin:
+            line = fin.readline()
+            while line:
+                data.append(line.strip().split(" "))
+                line = fin.readline()
+        return data
+
     def split_train_valid(self, valid_size):
         num_valid = int(len(self.all_x) * valid_size)
         train_x, valid_x = self.all_x[num_valid:], self.all_x[:num_valid]
@@ -51,7 +61,7 @@ class DataLoader(object):
         print("train size: %d, valid size: %d" % (len(train_x), len(valid_x)))
         return train_x, train_y, valid_x, valid_y
 
-    def get_vocabs2id(self):
+    def get_vocab2id(self):
         return self.source_vocab2id, self.target_vocab2id
 
     def get_id2vocab(self):
@@ -76,3 +86,6 @@ class DataLoader(object):
                     vocab_count[tok] += 1
                 data_list.append(tokens)
                 line = fx.readline()
+
+    def get_x_y(self):
+        return self.all_x, self.all_y
