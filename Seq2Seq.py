@@ -183,30 +183,34 @@ class Seq2Seq(object):
                     avg_precision = 0
                     num_valid_batch = 0
                     start_valid = time.clock()
-                    while valid_dataset.has_next(params["batch_size"]):
-                        num_valid_batch += 1
-                        valid_source_batch, valid_target_batch,\
-                        valid_source_lengths, valid_target_lengths = valid_dataset.next_batch(params["batch_size"])
+                    with open(sample_writer.valid_infer_filename(i_epoch), "w") as fsample:
+                        while valid_dataset.has_next(params["batch_size"]):
+                            num_valid_batch += 1
+                            valid_source_batch, valid_target_batch,\
+                            valid_source_lengths, valid_target_lengths = valid_dataset.next_batch(params["batch_size"])
 
-                        # inference的结果长度不一定与input一致！
-                        infer_batch_logits, valid_target_output, infer_sequence_lengths = sess.run(
-                            [self.inference_sample_id, self.target_output, self.infer_sequence_lengths],
-                            options=options,
-                            run_metadata=run_metadata,
-                            feed_dict={self.source_input: valid_source_batch,
-                                       self.source_sequence_length: valid_source_lengths,
-                                       self.target: valid_target_batch,
-                                       self.target_sequence_length: valid_target_lengths}
-                        )
+                            # inference的结果长度不一定与input一致！
+                            infer_batch_logits, valid_target_output, infer_sequence_lengths = sess.run(
+                                [self.inference_sample_id, self.target_output, self.infer_sequence_lengths],
+                                options=options,
+                                run_metadata=run_metadata,
+                                feed_dict={self.source_input: valid_source_batch,
+                                           self.source_sequence_length: valid_source_lengths,
+                                           self.target: valid_target_batch,
+                                           self.target_sequence_length: valid_target_lengths}
+                            )
 
-                        # write out samples
-                        if num_valid_batch % params["display_sample_per_n_batch"] == 0:
-                            sample_writer.write_inference_samples(valid_source_batch, infer_batch_logits, params["n_samples2write"])
+                            # will rewrite at each valid step, finally keep one file for each epoch
+                            sample_writer.write2file_inference_results(fsample, valid_source_batch, infer_batch_logits)
 
-                        valid_precision = self.__get_precision(sess, valid_target_output, infer_batch_logits, infer_sequence_lengths, params)
-                        avg_precision += valid_precision
-                    avg_precision /= num_valid_batch
-                    valid_time = time.clock() - start_valid
+                            # write out samples
+                            if num_valid_batch % params["display_sample_per_n_batch"] == 0:
+                                sample_writer.show_inference_samples(valid_source_batch, infer_batch_logits, params["n_samples2write"])
+
+                            valid_precision = self.__get_precision(sess, valid_target_output, infer_batch_logits, infer_sequence_lengths, params)
+                            avg_precision += valid_precision
+                        avg_precision /= num_valid_batch
+                        valid_time = time.clock() - start_valid
 
                     print("Epoch %d, Batch %d - Valid precision: %f, Train batch loss: %f, "
                           "AVG train time per batch: %f s, AVG valid time per batch %f s"

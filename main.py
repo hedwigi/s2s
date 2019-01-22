@@ -48,7 +48,7 @@ validset = Dataset(valid_x, valid_y, source_vocab2id, target_vocab2id,
 
 sample_writer = SampleWriter(id2target_vocab, id2source_vocab,
                              params["end_id"], params["pad_id"], params["start_id"],
-                             params["reverse_target"])
+                             params["reverse_target"], dirdata)
 
 
 if __name__ == "__main__":
@@ -84,3 +84,5 @@ if __name__ == "__main__":
         response = PreprocessUtil.idseq2words(response_in_id, id2target_vocab)
         print("Q: %s\n" % raw_question)
         print("R: %s\n" % response)
+
+
