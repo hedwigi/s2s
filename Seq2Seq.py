@@ -114,15 +114,16 @@ class Seq2Seq(object):
                                                                  tf.fill([batch_size], infer_start),
                                                                  infer_end)
             decoder_infer = tf.contrib.seq2seq.BasicDecoder(dec_infer_cells, gd_helper, encoder_states, output_layer)
-            self.decoder_infer_outputs, _, _ = tf.contrib.seq2seq.dynamic_decode(decoder_infer,
+            self.decoder_infer_outputs, _, self.infer_sequence_lengths = tf.contrib.seq2seq.dynamic_decode(decoder_infer,
                                                                                  impute_finished=True,
                                                                                  maximum_iterations=max_target_len)
 
-        # ------ TRAIN -------
+        # ------ FORWARD -------
         # TODO: with same value, why need identity?
         training_logits = tf.identity(self.decoder_train_outputs.rnn_output, name="logits")
         self.inference_sample_id = tf.identity(self.decoder_infer_outputs.sample_id, name="predictions")
 
+        # ------ BACKWARD -------
         masks = tf.sequence_mask(self.target_sequence_length, max_target_len, dtype=tf.float32, name="masks")
         with tf.name_scope("optimization"):
             self.cost = tf.contrib.seq2seq.sequence_loss(
@@ -179,7 +180,7 @@ class Seq2Seq(object):
                 if i_batch % params["valid_step"] == 0:
                     valid_dataset.reset()
                     # ---- VALID ----
-                    avg_acc = 0
+                    avg_precision = 0
                     num_valid_batch = 0
                     start_valid = time.clock()
                     while valid_dataset.has_next(params["batch_size"]):
@@ -188,8 +189,8 @@ class Seq2Seq(object):
                         valid_source_lengths, valid_target_lengths = valid_dataset.next_batch(params["batch_size"])
 
                         # inference的结果长度不一定与input一致！
-                        valid_batch_logits, valid_target_output = sess.run(
-                            [self.inference_sample_id, self.target_output],
+                        infer_batch_logits, valid_target_output, infer_sequence_lengths = sess.run(
+                            [self.inference_sample_id, self.target_output, self.infer_sequence_lengths],
                             options=options,
                             run_metadata=run_metadata,
                             feed_dict={self.source_input: valid_source_batch,
@@ -200,16 +201,16 @@ class Seq2Seq(object):
 
                         # write out samples
                         if num_valid_batch % params["display_sample_per_n_batch"] == 0:
-                            sample_writer.write_inference_samples(valid_source_batch, valid_batch_logits, params["n_samples2write"])
+                            sample_writer.write_inference_samples(valid_source_batch, infer_batch_logits, params["n_samples2write"])
 
-                        valid_acc = self.__get_accuracy(valid_target_output, valid_batch_logits, params)
-                        avg_acc += valid_acc
-                    avg_acc /= num_valid_batch
+                        valid_precision = self.__get_precision(sess, valid_target_output, infer_batch_logits, infer_sequence_lengths, params)
+                        avg_precision += valid_precision
+                    avg_precision /= num_valid_batch
                     valid_time = time.clock() - start_valid
 
-                    print("Epoch %d, Batch %d - Valid acc: %f, Train batch loss: %f, "
+                    print("Epoch %d, Batch %d - Valid precision: %f, Train batch loss: %f, "
                           "AVG train time per batch: %f s, AVG valid time per batch %f s"
-                          % (i_epoch, i_batch, avg_acc, train_batch_loss,
+                          % (i_epoch, i_batch, avg_precision, train_batch_loss,
                              train_time / i_batch,
                              valid_time / num_valid_batch
                              ))
@@ -246,17 +247,11 @@ class Seq2Seq(object):
             f.write(chrome_trace)
         return output_in_id
 
-    def __get_accuracy(self, true_batch, pred_batch_logits, params):
-        """
-
-        :param true_batch:
-        :param pred_batch_logits:
-        :return:
-        """
-        true_batch_seqlen = true_batch.shape[1]
-        pred_batch_seqlen = pred_batch_logits.shape[1]
-        max_seq_len = max(true_batch_seqlen, pred_batch_seqlen)
-        if max_seq_len - true_batch_seqlen:
+    def __get_precision(self, sess, true_batch, pred_batch_logits, pred_seq_len, params):
+        true_batch_maxlen = true_batch.shape[1]
+        pred_batch_maxlen = pred_batch_logits.shape[1]
+        max_seq_len = max(true_batch_maxlen, pred_batch_maxlen)
+        if max_seq_len - true_batch_maxlen:
             # axis 0: (before, after), axis 1: (before, after)
             true_batch = np.pad(true_batch,
                                 ((0, 0), (0, max_seq_len - true_batch.shape[1])),
@@ -264,9 +259,18 @@ class Seq2Seq(object):
                                 constant_values=((params["pad_id"], params["pad_id"]),
                                                  (params["pad_id"], params["pad_id"]))
                                 )
-        if max_seq_len - pred_batch_seqlen:
+        if max_seq_len - pred_batch_maxlen:
             pred_batch_logits = np.pad(pred_batch_logits,
                                        ((0,0), (0, max_seq_len - pred_batch_logits.shape[1])),
                                        "constant")
-        # reduce mean
-        return np.mean(np.equal(true_batch, pred_batch_logits))
+
+        # pred_seq_len = self.__length(pred_batch_logits, params["pad_id"])
+
+        mask = tf.cast(tf.sequence_mask(pred_seq_len, max_seq_len), tf.int32)
+        equals = tf.cast(tf.equal(pred_batch_logits, true_batch), tf.int32)
+        masked_eq = tf.multiply(equals, mask)
+        true_pos = tf.reduce_sum(masked_eq)
+        all = tf.reduce_sum(pred_seq_len)
+        return sess.run(true_pos / all)
+        # accuracy (including pad)
+        # return np.mean(np.equal(true_batch, pred_batch_logits))
