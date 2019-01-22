@@ -1,4 +1,5 @@
 import jpype
+import os
 from config import LIB_PARAMS
 
 
@@ -118,6 +119,8 @@ class PreprocessUtil:
         with open(pathy, "r") as fin:
             all_y = fin.readlines()
 
+        print("Loaded %d lines for %s and y" % (len(all_x), os.path.basename(pathx)))
+
         # Sort data by source length
         sorted_pairs = sorted(list(zip(all_x, all_y)), key=lambda xy: len(xy[0].strip().split()))
         with open(pathout_x, "w") as fx:
@@ -125,6 +128,7 @@ class PreprocessUtil:
                 for x, y in sorted_pairs:
                     fx.write(x)
                     fy.write(y)
+        print("Sorted and written files to %s and y" % pathout_x)
 
 
 if __name__ == "__main__":
