@@ -68,6 +68,8 @@ class PairDataWriter:
                                         finish = True
                         if finish:
                             break
+                    if finish:
+                        break
                     dialog = iter.__next__()
 
     @staticmethod
@@ -90,8 +92,8 @@ if __name__ == "__main__":
 
     infile = "/Users/wangyuqian/work/data/multi_1_4.4_100w.data"
     # infile = "ttt"
-    outfile_source = "train_x_multi"
-    outfile_target = "train_y_multi"
+    outfile_source = "all_x_multi"
+    outfile_target = "all_y_multi"
 
     params = {
         "max_num_data": 1000000,
