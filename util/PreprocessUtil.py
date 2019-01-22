@@ -110,6 +110,22 @@ class PreprocessUtil:
                 ngrams.append("".join(tokens[i: i + win]))
         return ngrams
 
+    @staticmethod
+    def sortby_len_rewrite(pathx, pathy, pathout_x, pathout_y):
+        with open(pathx, "r") as fin:
+            all_x = fin.readlines()
+
+        with open(pathy, "r") as fin:
+            all_y = fin.readlines()
+
+        # Sort data by source length
+        sorted_pairs = sorted(list(zip(all_x, all_y)), key=lambda xy: len(xy[0].strip().split()))
+        with open(pathout_x, "w") as fx:
+            with open(pathout_y, "w") as fy:
+                for x, y in sorted_pairs:
+                    fx.write(x)
+                    fy.write(y)
+
 
 if __name__ == "__main__":
     PreprocessUtil.init()
