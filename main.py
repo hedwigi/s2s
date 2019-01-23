@@ -63,9 +63,12 @@ if __name__ == "__main__":
     mode = "train"
 
     sess = tf.Session()
-    options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-    run_metadata = tf.RunMetadata()
-
+    options = None
+    run_metadata = None
+    # options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+    # run_metadata = tf.RunMetadata()
+    train_timeline_fname = 'timeline_01.json'
+    valid_timeline_fname = "timeline_infer_1s"
     model = Seq2Seq(params)
     if mode == "train":
         print("PARAMS:\n%s" % params)
@@ -81,13 +84,14 @@ if __name__ == "__main__":
         print("BiLSTM params size: %d" % total_bilstm_size)
         print("RNN params size: %d" % total_rnn_size)
         print("Total params size: %d" % (total_bilstm_size + total_rnn_size))
-        model.train(sess, train_iter, valid_iter, params, sample_writer, options, run_metadata)
+        model.train(sess, train_iter, valid_iter, params, sample_writer,
+                    options, run_metadata, train_timeline_fname)
 
     elif mode == "single":
         raw_question = "they like pears , apples , and mangoes ."
         question_in_id = PreprocessUtil.words2idseq(raw_question, source_vocab2id)
-        timeline_fname = "timeline_infer_1s"
-        response_in_id = model.infer(sess, question_in_id, params, options, run_metadata, timeline_fname)
+        response_in_id = model.infer(sess, question_in_id, params,
+                                     options, run_metadata, valid_timeline_fname)
         response = PreprocessUtil.idseq2words(response_in_id, id2target_vocab)
         print("Q: %s\n" % raw_question)
         print("R: %s\n" % response)

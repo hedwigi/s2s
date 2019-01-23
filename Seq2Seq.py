@@ -142,7 +142,8 @@ class Seq2Seq(object):
         vars = tf.trainable_variables()
         Monitor.print_params(vars)
 
-    def train(self, sess, train_dataset, valid_dataset, params, sample_writer, options, run_metadata):
+    def train(self, sess, train_dataset, valid_dataset, params, sample_writer,
+              options=None, run_metadata=None, train_timeline_fname=None):
         """
 
         :param sess:
@@ -152,6 +153,7 @@ class Seq2Seq(object):
         :param sample_writer:
         :param options:
         :param run_metadata:
+        :param train_timeline_fname:
         :return:
         """
         sess.run(tf.global_variables_initializer())
@@ -233,12 +235,15 @@ class Seq2Seq(object):
                                + params["model_base"] + "-" + str(i_epoch) + "_" + str(i_batch),
                                )
 
-        fetched_timeline = timeline.Timeline(run_metadata.step_stats)
-        chrome_trace = fetched_timeline.generate_chrome_trace_format()
-        with open('timeline_01.json', 'w') as f:
-            f.write(chrome_trace)
+        if run_metadata and options:
+            start_timeline = time.clock()
+            fetched_timeline = timeline.Timeline(run_metadata.step_stats)
+            chrome_trace = fetched_timeline.generate_chrome_trace_format()
+            with open(train_timeline_fname, 'w') as f:
+                f.write(chrome_trace)
+            print("\t timeline %f s" % (time.clock() - start_timeline))
 
-    def infer(self, sess, sequence, params, options, run_metadata, timeline_fname):
+    def infer(self, sess, sequence, params, options=None, run_metadata=None, timeline_fname=None):
         """
 
         :param sequence: list of int
@@ -254,10 +259,11 @@ class Seq2Seq(object):
                                 feed_dict={self.source_input: [sequence],
                                            self.source_sequence_length: [len(sequence)],
                                            self.target_sequence_length: [10]})[0]
-        fetched_timeline = timeline.Timeline(run_metadata.step_stats)
-        chrome_trace = fetched_timeline.generate_chrome_trace_format()
-        with open(timeline_fname + '.json', 'w') as f:
-            f.write(chrome_trace)
+        if run_metadata and options:
+            fetched_timeline = timeline.Timeline(run_metadata.step_stats)
+            chrome_trace = fetched_timeline.generate_chrome_trace_format()
+            with open(timeline_fname + '.json', 'w') as f:
+                f.write(chrome_trace)
         return output_in_id
 
     def __get_precision(self, sess, true_batch, pred_batch_logits, pred_seq_len, params):
