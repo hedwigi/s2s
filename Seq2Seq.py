@@ -182,9 +182,11 @@ class Seq2Seq(object):
                     # ---- VALID ----
                     avg_precision = 0
                     num_valid_batch = 0
-                    start_valid = time.clock()
+                    avg_valid_time = 0
+                    avg_write_time = 0
                     with open(sample_writer.valid_infer_filename(i_epoch), "w") as fsample:
                         while valid_dataset.has_next(params["batch_size"]):
+                            start_valid = time.clock()
                             num_valid_batch += 1
                             valid_source_batch, valid_target_batch,\
                             valid_source_lengths, valid_target_lengths = valid_dataset.next_batch(params["batch_size"])
@@ -199,25 +201,32 @@ class Seq2Seq(object):
                                            self.target: valid_target_batch,
                                            self.target_sequence_length: valid_target_lengths}
                             )
+                            avg_valid_time += time.clock() - start_valid
 
                             # will rewrite at each valid step, finally keep one file for each epoch
+                            start_write = time.clock()
                             sample_writer.write2file_inference_results(fsample, valid_source_batch, infer_batch_logits)
+                            avg_write_time += time.clock() - start_write
 
                             # write out samples
                             if num_valid_batch % params["display_sample_per_n_batch"] == 0:
                                 sample_writer.show_inference_samples(valid_source_batch, infer_batch_logits, params["n_samples2write"])
 
+                            # valid precision
                             valid_precision = self.__get_precision(sess, valid_target_output, infer_batch_logits, infer_sequence_lengths, params)
                             avg_precision += valid_precision
                         avg_precision /= num_valid_batch
-                        valid_time = time.clock() - start_valid
+                        avg_valid_time /= num_valid_batch
+                        avg_write_time /= num_valid_batch
 
                     print("Epoch %d, Batch %d - Valid precision: %f, Train batch loss: %f, "
-                          "AVG train time per batch: %f s, AVG valid time per batch %f s"
+                          "AVG train time per batch: %f s, AVG valid time per batch %f s, "
+                          "AVG write time per batch: %f s on %d batches"
                           % (i_epoch, i_batch, avg_precision, train_batch_loss,
                              train_time / i_batch,
-                             valid_time / num_valid_batch
-                             ))
+                             avg_valid_time,
+                             avg_write_time,
+                             num_valid_batch))
 
                     # 在每次print的时候save，使得print的结果与保存的model相对应
                     saver.save(sess, params["model_dir"] + "/"
