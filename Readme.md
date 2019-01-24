@@ -1,6 +1,7 @@
 s2s en-fr tutorial
-- bug1: target length after padding, resulting in wrong loss/accuracy
 https://github.com/deep-diver/EN-FR-MLT-tensorflow/blob/master/dlnd_language_translationv2.ipynb
+- bug1: target length after padding, resulting in wrong loss/accuracy
+- bug2: decoder_infer shouldn't contain DropoutWrapper
 
 tf timeline
 https://towardsdatascience.com/howto-profile-tensorflow-1a49fb18073d
@@ -10,6 +11,10 @@ https://github.com/tensorflow/nmt#other-details-for-better-nmt-models
 
 stacked bilstm
 https://blog.csdn.net/u012436149/article/details/71080601
+
+attention part ref
+https://github.com/tensorflow/nmt#attention-wrapper-api
+https://github.com/applenob/RNN-for-Joint-NLU/blob/master/model.py
 
 data clustering
 ### 过滤掉clusters.center中大量0.0的feat
