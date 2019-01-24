@@ -68,8 +68,8 @@ class Seq2Seq(object):
                 bw_rnn_cell = tf.contrib.rnn.LSTMCell(params["rnn_size"] / 2)
                 bw_dropped_out_rnn_cell = tf.contrib.rnn.DropoutWrapper(bw_rnn_cell, params["keep_prob"])
 
-                # state = (fw_state, bw_state)
-                # fw_state = (c, h)
+                # outputs = tuple(fw_out, bw_out)
+                # state = (fw_state, bw_state), fw_state = (c, h)
                 outputs, state = tf.nn.bidirectional_dynamic_rnn(
                     fw_dropped_out_rnn_cell, bw_dropped_out_rnn_cell, input, self.source_sequence_length, dtype=tf.float32
                 )
@@ -79,18 +79,30 @@ class Seq2Seq(object):
                 states = tf.concat([state[0], state[1]], axis=2)
                 encoder_state = tf.nn.rnn_cell.LSTMStateTuple(states[0], states[1])
                 encoder_states.append(encoder_state)
-        encoder_states = tuple(encoder_states)
+        # encoder_states = tuple(encoder_states)  # if no attention
+        # [batch_size, max_time, num_units]
+        encoder_outputs = input
 
         # ------ RNN Decoder -------
-        dec_embeddings = tf.Variable(tf.random_uniform([params["target_vocab_size"], params["decoding_embedding_size"]]))
+        # Create an attention mechanism
+        attention_mechanism = tf.contrib.seq2seq.LuongAttention(
+            params["rnn_size"], encoder_outputs,
+            memory_sequence_length=self.source_sequence_length)
+
+        dec_embeddings = tf.Variable(tf.random_uniform([params["target_vocab_size"], params["decoding_embedding_size"]]),
+                                     name="output_embedding")
         dec_embed_input = tf.nn.embedding_lookup(dec_embeddings, target_input)
 
         l_dec_rnn_cell = [tf.contrib.rnn.LSTMCell(params["rnn_size"]) for i in range(params["num_layers"])]
         dec_stacked_cells = tf.contrib.rnn.MultiRNNCell(l_dec_rnn_cell)
+        dec_stacked_att_cells = tf.contrib.seq2seq.AttentionWrapper(
+            dec_stacked_cells, attention_mechanism,
+            attention_layer_size=params["rnn_size"])
+
         # reuse: shared rnn cells
         with tf.variable_scope("decode", reuse=tf.AUTO_REUSE):
             # --- Train phase ---
-            dec_train_cells = tf.contrib.rnn.DropoutWrapper(dec_stacked_cells, output_keep_prob=params["keep_prob"])
+            dec_train_cells = tf.contrib.rnn.DropoutWrapper(dec_stacked_att_cells, output_keep_prob=params["keep_prob"])
             output_layer = tf.layers.Dense(params["target_vocab_size"])
 
             # dynamic_rnn只能使用提供的input得到output，（helper + decoder + dynamic_decode）可以自定义得到output的方式
@@ -98,7 +110,10 @@ class Seq2Seq(object):
             helper = tf.contrib.seq2seq.TrainingHelper(dec_embed_input, self.target_sequence_length)
 
             # 核心decoder，使用helper的input和rnn_cell，以及输出层，返回单次的RNN output
-            decoder_train = tf.contrib.seq2seq.BasicDecoder(dec_train_cells, helper, encoder_states, output_layer)
+            decoder_train = tf.contrib.seq2seq.BasicDecoder(dec_train_cells, helper,
+                                                            dec_train_cells.zero_state(dtype=tf.float32,
+                                                                                       batch_size=batch_size),
+                                                            output_layer)
 
             # 使用核心decoder，提供用来unroll的大循环
             self.decoder_train_outputs, _, _ = tf.contrib.seq2seq.dynamic_decode(decoder_train,
@@ -106,14 +121,15 @@ class Seq2Seq(object):
                                                                                  maximum_iterations=max_target_len)
 
             # --- Infer phase ---
-            # TODO: another Dropout????
-            dec_infer_cells = tf.contrib.rnn.DropoutWrapper(dec_stacked_cells, output_keep_prob=params["keep_prob"])
             infer_start = params["end_id"] if params["reverse_target"] else params["start_id"]
             infer_end = params["start_id"] if params["reverse_target"] else params["end_id"]
             gd_helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(dec_embeddings,
                                                                  tf.fill([batch_size], infer_start),
                                                                  infer_end)
-            decoder_infer = tf.contrib.seq2seq.BasicDecoder(dec_infer_cells, gd_helper, encoder_states, output_layer)
+            decoder_infer = tf.contrib.seq2seq.BasicDecoder(dec_stacked_att_cells, gd_helper,
+                                                            dec_train_cells.zero_state(dtype=tf.float32,
+                                                                                       batch_size=batch_size),
+                                                            output_layer)
             self.decoder_infer_outputs, _, self.infer_sequence_lengths = tf.contrib.seq2seq.dynamic_decode(decoder_infer,
                                                                                  impute_finished=True,
                                                                                  maximum_iterations=max_target_len)
@@ -124,6 +140,7 @@ class Seq2Seq(object):
         self.inference_sample_id = tf.identity(self.decoder_infer_outputs.sample_id, name="predictions")
 
         # ------ BACKWARD -------
+        # training phase, decode sequence length = true target seq length
         masks = tf.sequence_mask(self.target_sequence_length, max_target_len, dtype=tf.float32, name="masks")
         with tf.name_scope("optimization"):
             self.cost = tf.contrib.seq2seq.sequence_loss(
