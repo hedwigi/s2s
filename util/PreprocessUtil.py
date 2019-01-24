@@ -26,7 +26,7 @@ class PreprocessUtil:
         """
         # tokens = [seg.word for seg in PreprocessUtil.hanlp.segment(raw_sentence)]
         tokens = raw_sentence.split()
-        return [source_vocab2id[tok] if tok in source_vocab2id else "<UNK>" for tok in tokens]
+        return [source_vocab2id[tok] if tok in source_vocab2id else source_vocab2id["<UNK>"] for tok in tokens]
 
     @staticmethod
     def idseq2words(idseq, id2target_vocab):
