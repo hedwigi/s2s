@@ -31,8 +31,8 @@ class SampleWriter:
             infer_words = self.__ids2words(infer_batch_logits[i], self.id2target_vocab)
             fout.write("Source: %s,\tInfer: %s\n" % (" ".join(source_words), " ".join(infer_words)))
 
-    def valid_infer_filename(self, i_epoch):
-        return os.path.join(self.dirdata, "infer_results.ep" + str(i_epoch))
+    def valid_infer_filename(self, model_name, i_epoch):
+        return os.path.join(self.dirdata, model_name + "_infer_results.ep" + str(i_epoch))
 
     def __ids2words(self, seq_ids, id2vocab):
         words = []

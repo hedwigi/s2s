@@ -203,7 +203,7 @@ class Seq2Seq(object):
                     num_valid_batch = 0
                     avg_valid_time = 0
                     avg_write_time = 0
-                    with open(sample_writer.valid_infer_filename(i_epoch), "w") as fsample:
+                    with open(sample_writer.valid_infer_filename("s2satt", i_epoch), "w") as fsample:
                         while valid_dataset.has_next(params["batch_size"]):
                             start_valid = time.clock()
                             num_valid_batch += 1
