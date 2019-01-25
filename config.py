@@ -29,6 +29,32 @@ params = {
 
     "reverse_target": False,
 
+    # TransformerKyu
+    "maxlen": 16,  # Maximum number of words in a sentence. alias = T.
+                 # Feel free to increase this if you are ambitious.
+    "max_context_size": 6,
+    "min_cnt": 5,  # words whose occurred less than min_cnt are encoded as <UNK>.
+    "hidden_units": 512, # alias = C
+    "num_blocks": 6,  # number of encoder/decoder blocks
+    "num_epochs": 20,
+    "num_heads": 8,
+    "dropout_rate": 0.1,
+    "sinusoid": False,  # If True, use sinusoid. If false, positional embedding.
+    "max_infer_step": 15,
+
+    # Test Tiny model
+    # "maxlen": 50,  # Maximum number of words in a sentence. alias = T.
+    #              # Feel free to increase this if you are ambitious.
+    # "max_context_size": 1,
+    # "min_cnt": 2,  # words whose occurred less than min_cnt are encoded as <UNK>.
+    # "hidden_units": 64, # alias = C
+    # "num_blocks": 2,  # number of encoder/decoder blocks
+    # "num_epochs": 20,
+    # "num_heads": 2,
+    # "dropout_rate": 0.1,
+    # "sinusoid": False,  # If True, use sinusoid. If false, positional embedding.
+    # "max_infer_step": 15,
+
 }
 
 
