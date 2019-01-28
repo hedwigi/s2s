@@ -3,7 +3,7 @@ import tensorflow as tf
 from tensorflow.python.client import timeline
 import time
 import numpy as np
-
+from util.Monitor import Monitor
 from TransformerKyuGraph import TransformerKyuGraph
 
 
@@ -12,6 +12,13 @@ class TransformerKyu:
         with tf.variable_scope("graph", reuse=tf.AUTO_REUSE):
             self.graph_train = TransformerKyuGraph(params, is_training=True)
             self.graph_infer = TransformerKyuGraph(params, is_training=False)
+        # print all variables
+        vars = tf.trainable_variables()
+        uniq_vars = []
+        for v in vars:
+            if v not in uniq_vars:
+                uniq_vars.append(v)
+        Monitor.print_params(uniq_vars)
 
     def train(self, sess, train_dataset, valid_dataset, params, sample_writer,
               options=None, run_metadata=None, train_timeline_fname=None):
@@ -142,46 +149,4 @@ class TransformerKyu:
         return sess.run(true_pos / all)
         # accuracy (including pad)
         # return np.mean(np.equal(true_batch, pred_batch_logits))
-
-# if __name__ == '__main__':
-#     # Load vocabulary
-#     source_vocab2idx, idx2source_vocab = load_source_vocab()
-#     target_vocab2idx, idx2target_vocab = load_target_vocab()
-#
-#     # Params
-#     train_mode = True
-#     n_sample2show = hp.n_sample2show
-#     n_show_step = hp.n_show_step
-#
-#     # Construct graph
-#     graph = TransformerKyu(train_mode)
-#     print("Graph loaded")
-#
-#     # Start session
-#     print("Need to clear all checkpoint and models in logdir/ !!!!!")
-#     sv = tf.train.Supervisor(graph=graph.graph,
-#                              logdir=hp.logdir,
-#                              save_model_secs=0)
-#     with sv.managed_session() as sess:
-#         for epoch in range(1, hp.num_epochs + 1):
-#             if sv.should_stop(): break
-#             for step in tqdm(range(graph.num_batch), total=graph.num_batch, ncols=70, leave=False, unit='b'):
-#                 _, mean_loss, acc, preds, y, x = sess.run([graph.train_op, graph.mean_loss, graph.acc,
-#                                                            graph.preds, graph.y, graph.x])
-#
-#                 if step % n_show_step == 0:
-#                     # show samples
-#                     for p in range(n_sample2show):
-#                         xx = " ".join(idx2source_vocab[idx] for idx in x[p]).split("</S>")[0].strip()
-#                         yy = " ".join(idx2target_vocab[idx] for idx in y[p]).split("</S>")[0].strip()
-#                         pre = " ".join(idx2target_vocab[idx] for idx in preds[p]).split("</S>")[0].strip()
-#                         print("\tSource: %s ### Target: %s ### Pred: %s" % (xx, yy, pre))
-#
-#                 print("Epoch %d, Step %d, Mean train loss %f, Train acc %f" % (epoch, step, mean_loss, acc))
-#
-#             gs = sess.run(graph.global_step)
-#             sv.saver.save(sess, hp.logdir + '/model_epoch_%02d_gs_%d' % (epoch, gs))
-#
-#     print("Done")
-
 

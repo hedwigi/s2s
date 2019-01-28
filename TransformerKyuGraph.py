@@ -4,7 +4,6 @@ Created on 2019/1/28
 @author: wangyuqian
 """
 from util.TransformerUtil import *
-from util.Monitor import Monitor
 tf.set_random_seed(1)
 
 
@@ -150,6 +149,3 @@ class TransformerKyuGraph:
             # Summary
             tf.summary.scalar('mean_loss', self.mean_loss)
             self.merged = tf.summary.merge_all()
-
-        vars = tf.trainable_variables()
-        Monitor.print_params(vars)
