@@ -68,7 +68,7 @@ if __name__ == "__main__":
     train_timeline_fname = 'timeline_01.json'
     valid_timeline_fname = "timeline_infer_1s"
     # model = Seq2Seq(params)
-    model = TransformerKyu(params, is_training=(mode == "train"))
+    model = TransformerKyu(params)
 
     # print("PARAMS:\n%s" % params)
     # bilstm_cell_params_1 = 4 * (params["rnn_size"] / 2) \

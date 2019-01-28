@@ -19,11 +19,13 @@ class SampleWriter:
         self.reverse_target = reverse_target
         self.dirdata = dirdata
 
-    def show_inference_samples(self, source_batch, infer_batch, n_sample):
+    def show_inference_samples(self, source_batch, target_batch, infer_batch, n_sample):
         for i in range(n_sample):
             source_words = self.__ids2words(source_batch[i], self.id2source_vocab)
             infer_words = self.__ids2words(infer_batch[i], self.id2target_vocab)
-            print("\tSource: %s,\tInfer: %s" % (" ".join(source_words), " ".join(infer_words)))
+            target_words = self.__ids2words(target_batch[i], self.id2target_vocab)
+            print("\tSource: %s,\tTarget: %s,\tInfer: %s" %
+                  (" ".join(source_words), " ".join(target_words), " ".join(infer_words)))
 
     def write2file_inference_results(self, fout, valid_source_batch, infer_batch_logits):
         for i in range(len(valid_source_batch)):

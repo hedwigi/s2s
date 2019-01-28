@@ -229,7 +229,8 @@ class Seq2Seq(object):
 
                             # write out samples
                             if num_valid_batch % params["display_sample_per_n_batch"] == 0:
-                                sample_writer.show_inference_samples(valid_source_batch, infer_batch_logits, params["n_samples2write"])
+                                sample_writer.show_inference_samples(valid_source_batch, valid_target_output,
+                                                                     infer_batch_logits, params["n_samples2write"])
 
                             # valid precision
                             valid_precision = self.__get_precision(sess, valid_target_output, infer_batch_logits, infer_sequence_lengths, params)

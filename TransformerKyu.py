@@ -4,158 +4,14 @@ from tensorflow.python.client import timeline
 import time
 import numpy as np
 
-from util.TransformerUtil import *
+from TransformerKyuGraph import TransformerKyuGraph
 
 
 class TransformerKyu:
-    def __init__(self, params, is_training=True):
-        self.source_input = tf.placeholder(tf.int32, shape=(None, None), name="source_input")
-        self.target = tf.placeholder(tf.int32, shape=(None, None), name="target")
-        self.source_sequence_length = tf.placeholder(tf.int32, [None], name="source_sequence_length")
-        # if reverse_target, length doesn't include <S> at the end
-        self.target_sequence_length = tf.placeholder(tf.int32, [None], name="target_sequence_length")
-
-        # 获取max target len
-        max_source_len = tf.reduce_max(self.source_sequence_length)
-
-        # 获取可变的batch_size
-        batch_size = tf.shape(self.source_input)[0]
-
-        # define decoder inputs
-        self.decoder_inputs = tf.concat((tf.ones_like(self.target[:, :1]) * 2, self.target[:, :-1]), -1)  # 2:<S>
-
-        # Encoder
-        with tf.variable_scope("encoder"):
-            # Embedding
-            self.enc = embedding(self.source_input,
-                                 vocab_size=params["source_vocab_size"],
-                                 num_units=params["hidden_units"],
-                                 scale=True,
-                                 scope="enc_embed")
-
-            key_masks = tf.expand_dims(tf.sign(tf.reduce_sum(tf.abs(self.enc), axis=-1)), -1)
-
-            # Positional Encoding
-            if params["sinusoid"]:
-                self.enc += positional_encoding(self.source_input,
-                                                num_units=params["hidden_units"],
-                                                zero_pad=False,
-                                                scale=False,
-                                                scope="enc_pe")
-            else:
-                self.enc += embedding(
-                    tf.tile(tf.expand_dims(tf.range(tf.shape(self.source_input)[1]), 0), [tf.shape(self.source_input)[0], 1]),
-                    vocab_size=params["maxlen"] * params["max_context_size"],
-                    num_units=params["hidden_units"],
-                    zero_pad=False,
-                    scale=False,
-                    scope="enc_pe")
-
-            self.enc *= key_masks
-
-            # Dropout
-            self.enc = tf.layers.dropout(self.enc,
-                                         rate=params["dropout_rate"],
-                                         training=tf.convert_to_tensor(is_training))
-
-            # Blocks
-            for i in range(params["num_blocks"]):
-                with tf.variable_scope("num_blocks_{}".format(i)):
-                    ## Multihead Attention
-                    self.enc = multihead_attention(queries=self.enc,
-                                                   keys=self.enc,
-                                                   num_units=params["hidden_units"],
-                                                   num_heads=params["num_heads"],
-                                                   dropout_rate=params["dropout_rate"],
-                                                   is_training=is_training,
-                                                   causality=False)
-
-                    ## Feed Forward
-                    self.enc = feedforward(self.enc, num_units=[4 * params["hidden_units"], params["hidden_units"]])
-
-        # Decoder
-        with tf.variable_scope("decoder"):
-            # Embedding
-            self.dec = embedding(self.decoder_inputs,
-                                 vocab_size=params["target_vocab_size"],
-                                 num_units=params["hidden_units"],
-                                 scale=True,
-                                 scope="dec_embed")
-
-            key_masks = tf.expand_dims(tf.sign(tf.reduce_sum(tf.abs(self.dec), axis=-1)), -1)
-
-            # Positional Encoding
-            if params["sinusoid"]:
-                self.dec += positional_encoding(self.decoder_inputs,
-                                                num_units=params["hidden_units"],
-                                                zero_pad=False,
-                                                scale=False,
-                                                scope="dec_pe")
-            else:
-                self.dec += embedding(tf.tile(tf.expand_dims(tf.range(tf.shape(self.decoder_inputs)[1]), 0),
-                                              [tf.shape(self.decoder_inputs)[0], 1]),
-                                      vocab_size=params["maxlen"],
-                                      num_units=params["hidden_units"],
-                                      zero_pad=False,
-                                      scale=False,
-                                      scope="dec_pe")
-            self.dec *= key_masks
-
-            # Dropout
-            self.dec = tf.layers.dropout(self.dec,
-                                         rate=params["dropout_rate"],
-                                         training=tf.convert_to_tensor(is_training))
-
-            # Blocks
-            for i in range(params["num_blocks"]):
-                with tf.variable_scope("num_blocks_{}".format(i)):
-                    # Multihead Attention ( self-attention)
-                    self.dec = multihead_attention(queries=self.dec,
-                                                   keys=self.dec,
-                                                   num_units=params["hidden_units"],
-                                                   num_heads=params["num_heads"],
-                                                   dropout_rate=params["dropout_rate"],
-                                                   is_training=is_training,
-                                                   causality=True,
-                                                   scope="self_attention")
-
-                    # Multihead Attention ( vanilla attention)
-                    self.dec = multihead_attention(queries=self.dec,
-                                                   keys=self.enc,
-                                                   num_units=params["hidden_units"],
-                                                   num_heads=params["num_heads"],
-                                                   dropout_rate=params["dropout_rate"],
-                                                   is_training=is_training,
-                                                   causality=False,
-                                                   scope="vanilla_attention")
-
-                    # Feed Forward
-                    self.dec = feedforward(self.dec, num_units=[4 * params["hidden_units"], params["hidden_units"]])
-
-        # Final linear projection
-        self.logits = tf.layers.dense(self.dec, params["target_vocab_size"])
-        # beam size = 1
-        self.preds = tf.to_int32(tf.arg_max(self.logits, dimension=-1))
-        self.istarget = tf.to_float(tf.not_equal(self.target, 0))  # 0: PAD
-        self.infer_sequence_lengths = tf.reduce_sum(self.istarget, axis=-1)
-        self.acc = tf.reduce_sum(tf.to_float(tf.equal(self.preds, self.target)) * self.istarget) / (
-            tf.reduce_sum(self.istarget))
-        tf.summary.scalar('acc', self.acc)
-
-        if is_training:
-            # Loss
-            self.y_smoothed = label_smoothing(tf.one_hot(self.target, depth=params["target_vocab_size"]))
-            self.loss = tf.nn.softmax_cross_entropy_with_logits(logits=self.logits, labels=self.y_smoothed)
-            self.mean_loss = tf.reduce_sum(self.loss * self.istarget) / (tf.reduce_sum(self.istarget))
-
-            # Training Scheme
-            self.global_step = tf.Variable(0, name='global_step', trainable=False)
-            self.optimizer = tf.train.AdamOptimizer(learning_rate=params["lr"], beta1=0.9, beta2=0.98, epsilon=1e-8)
-            self.train_op = self.optimizer.minimize(self.mean_loss, global_step=self.global_step)
-
-            # Summary
-            tf.summary.scalar('mean_loss', self.mean_loss)
-            self.merged = tf.summary.merge_all()
+    def __init__(self, params):
+        with tf.variable_scope("graph", reuse=tf.AUTO_REUSE):
+            self.graph_train = TransformerKyuGraph(params, is_training=True)
+            self.graph_infer = TransformerKyuGraph(params, is_training=False)
 
     def train(self, sess, train_dataset, valid_dataset, params, sample_writer,
               options=None, run_metadata=None, train_timeline_fname=None):
@@ -172,13 +28,13 @@ class TransformerKyu:
                 train_source_lengths, train_target_lengths = train_dataset.next_batch(params["batch_size"])
                 # should run train_op to train, but only fetch cost
                 # train phase的logit与input长度一定相同，才能计算loss
-                _, train_batch_loss = sess.run([self.train_op, self.mean_loss],
+                _, train_batch_loss = sess.run([self.graph_train.train_op, self.graph_train.mean_loss],
                                                options=options,
                                                run_metadata=run_metadata,
-                                               feed_dict={self.source_input: train_source_batch,
-                                                          self.source_sequence_length: train_source_lengths,
-                                                          self.target: train_target_batch,
-                                                          self.target_sequence_length: train_target_lengths})
+                                               feed_dict={self.graph_train.source_input: train_source_batch,
+                                                          self.graph_train.source_sequence_length: train_source_lengths,
+                                                          self.graph_train.target: train_target_batch,
+                                                          self.graph_train.target_sequence_length: train_target_lengths})
                 train_time += time.clock() - start_train
 
                 # show progress
@@ -196,30 +52,41 @@ class TransformerKyu:
                             valid_source_batch, valid_target_batch, \
                             valid_source_lengths, valid_target_lengths = valid_dataset.next_batch(params["batch_size"])
 
+                            # Autoregressive inference
+                            infer_result = np.zeros((params["batch_size"], params["maxlen"]), np.int32)
+                            for j in range(params["maxlen"]):
+                                _preds = sess.run(self.graph_infer.preds,
+                                                  feed_dict={self.graph_infer.source_input: valid_source_batch,
+                                                               self.graph_infer.target: infer_result})
+                                infer_result[:, j] = _preds[:, j]
+                            infer_sequence_lengths = np.sum(np.not_equal(infer_result, params["pad_id"]),
+                                                            axis=-1, dtype=np.float32)
+
                             # inference的结果长度不一定与input一致！
-                            infer_batch_logits, valid_target_output, infer_sequence_lengths = sess.run(
-                                [self.preds, self.target, self.infer_sequence_lengths],
-                                options=options,
-                                run_metadata=run_metadata,
-                                feed_dict={self.source_input: valid_source_batch,
-                                           self.source_sequence_length: valid_source_lengths,
-                                           self.target: valid_target_batch,
-                                           self.target_sequence_length: valid_target_lengths}
-                            )
+                            # infer_batch_logits, valid_target_output, infer_sequence_lengths = sess.run(
+                            #     [self.preds, self.target, self.infer_sequence_lengths],
+                            #     options=options,
+                            #     run_metadata=run_metadata,
+                            #     feed_dict={self.source_input: valid_source_batch,
+                            #                self.source_sequence_length: valid_source_lengths,
+                            #                self.target: valid_target_batch,
+                            #                self.target_sequence_length: valid_target_lengths}
+                            # )
                             avg_valid_time += time.clock() - start_valid
 
                             # will rewrite at each valid step, finally keep one file for each epoch
                             start_write = time.clock()
-                            sample_writer.write2file_inference_results(fsample, valid_source_batch, infer_batch_logits)
+                            sample_writer.write2file_inference_results(fsample, valid_source_batch, infer_result)
                             avg_write_time += time.clock() - start_write
 
                             # write out samples
                             if num_valid_batch % params["display_sample_per_n_batch"] == 0:
-                                sample_writer.show_inference_samples(valid_source_batch, infer_batch_logits,
+                                sample_writer.show_inference_samples(valid_source_batch, valid_target_batch,
+                                                                     infer_result,
                                                                      params["n_samples2write"])
 
                             # valid precision
-                            valid_precision = self.__get_precision(sess, valid_target_output, infer_batch_logits,
+                            valid_precision = self.__get_precision(sess, valid_target_batch, infer_result,
                                                                    infer_sequence_lengths, params)
                             avg_precision += valid_precision
                         avg_precision /= num_valid_batch
