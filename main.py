@@ -1,13 +1,13 @@
 import os
 import time
 import tensorflow as tf
-from config import params
+from config import params_common, params_models
 from Seq2Seq import Seq2Seq
 from entity.BatchIterator import BatchIterator
 from util.SampleWriter import SampleWriter
 from util.VocabLoader import VocabLoader
 from util.PreprocessUtil import PreprocessUtil
-from TransformerKyu import TransformerKyu
+from Transformer import Transformer
 
 mode = "train"
 
@@ -25,10 +25,10 @@ path_valid_x = path_valid_x_orig + ".sorted"
 path_valid_y = path_valid_y_orig + ".sorted"
 
 # **** DATA PROCESS ****
-default_vocab = {"<PAD>": params["pad_id"],
-                 "<S>": params["start_id"],
-                 "<EOS>": params["end_id"],
-                 "<UNK>": params["unk_id"]}
+default_vocab = {"<PAD>": params_common["pad_id"],
+                 "<S>": params_common["start_id"],
+                 "<EOS>": params_common["end_id"],
+                 "<UNK>": params_common["unk_id"]}
 
 # **** CONSTRUCT/LOAD VOCAB ****
 if mode == "train":
@@ -38,24 +38,23 @@ if mode == "train":
                                       path_valid_x, path_valid_y)
 
     vocab_loader = VocabLoader(path_train_x, path_train_y,
-                               params["source_vocab_size"], params["target_vocab_size"],
+                               params_common["source_vocab_size"], params_common["target_vocab_size"],
                                default_vocab,
                                True,
-                               params["source_vocab"],
-                               params["target_vocab"])
+                               params_common["source_vocab"],
+                               params_common["target_vocab"])
 
     source_vocab2id, target_vocab2id = vocab_loader.get_vocab2id()
     id2source_vocab, id2target_vocab = vocab_loader.get_id2vocab()
 
 else:
     # inference
-    source_vocab2id, target_vocab2id = VocabLoader.load_vocab2id(params["source_vocab"])
-    id2source_vocab, id2target_vocab = VocabLoader.load_vocab2id(params["target_vocab"])
-    params["keep_prob"] = 1.0
+    source_vocab2id, target_vocab2id = VocabLoader.load_vocab2id(params_common["source_vocab"])
+    id2source_vocab, id2target_vocab = VocabLoader.load_vocab2id(params_common["target_vocab"])
 
 # update params
-params["source_vocab_size"] = min(len(source_vocab2id), params["source_vocab_size"])
-params["target_vocab_size"] = min(len(id2target_vocab), params["target_vocab_size"])
+params_common["source_vocab_size"] = min(len(source_vocab2id), params_common["source_vocab_size"])
+params_common["target_vocab_size"] = min(len(id2target_vocab), params_common["target_vocab_size"])
 
 
 if __name__ == "__main__":
@@ -67,44 +66,34 @@ if __name__ == "__main__":
     # run_metadata = tf.RunMetadata()
     train_timeline_fname = 'timeline_01.json'
     valid_timeline_fname = "timeline_infer_1s"
-    # model = Seq2Seq(params)
-    model = TransformerKyu(params)
-
-    # print("PARAMS:\n%s" % params)
-    # bilstm_cell_params_1 = 4 * (params["rnn_size"] / 2) \
-    #                        * (params["rnn_size"] / 2 + params["encoding_embedding_size"] + 1)
-    # bilstm_cell_params_o = 4 * (params["rnn_size"] / 2) \
-    #                        * (params["rnn_size"] / 2 + params["rnn_size"] + 1)
-    # rnn_cell_params_1 = 4 * params["rnn_size"] * (params["rnn_size"] + params["decoding_embedding_size"] + 1)
-    # rnn_cell_params_o = 4 * params["rnn_size"] * (params["rnn_size"] + params["rnn_size"] + 1)
-    #
-    # total_bilstm_size = bilstm_cell_params_1 * 2 + (params["num_layers"] - 1) * bilstm_cell_params_o * 2
-    # total_rnn_size = rnn_cell_params_1 + (params["num_layers"] - 1) * rnn_cell_params_o
-    # print("BiLSTM params size: %d" % total_bilstm_size)
-    # print("RNN params size without Attention: %d" % total_rnn_size)
-    # print("Total params size: %d" % (total_bilstm_size + total_rnn_size))
+    # model_params = params_models["S2S"]
+    # model = Seq2Seq(params, model_params)
+    model_params = params_models["Transformer"]["Test"]
+    model_params.update(vocab_size=max(params_common["source_vocab_size"], params_common["target_vocab_size"]))
+    print(model_params)
+    model = Transformer(params_common, model_params)
 
     if mode == "train":
 
         train_iter = BatchIterator(path_train_x, path_train_y, source_vocab2id, target_vocab2id,
-                                   params["start_id"], params["end_id"], params["unk_id"], params["pad_id"],
-                                   params["reverse_target"])
+                                   params_common["start_id"], params_common["end_id"], params_common["unk_id"], params_common["pad_id"],
+                                   params_common["reverse_target"])
 
         valid_iter = BatchIterator(path_valid_x, path_valid_y, source_vocab2id, target_vocab2id,
-                                   params["start_id"], params["end_id"], params["unk_id"], params["pad_id"],
-                                   params["reverse_target"])
+                                   params_common["start_id"], params_common["end_id"], params_common["unk_id"], params_common["pad_id"],
+                                   params_common["reverse_target"])
 
         sample_writer = SampleWriter(id2target_vocab, id2source_vocab,
-                                     params["end_id"], params["pad_id"], params["start_id"],
-                                     params["reverse_target"], dirdata)
+                                     params_common["end_id"], params_common["pad_id"], params_common["start_id"],
+                                     params_common["reverse_target"], dirdata)
 
-        model.train(sess, train_iter, valid_iter, params, sample_writer,
+        model.train(sess, train_iter, valid_iter, sample_writer,
                     options, run_metadata, train_timeline_fname)
 
     elif mode == "single":
         raw_question = "明天 开始 军训 了"
         question_in_id = PreprocessUtil.words2idseq(raw_question, source_vocab2id)
-        response_in_id = model.infer(sess, question_in_id, params,
+        response_in_id = model.infer(sess, question_in_id,
                                      options, run_metadata, valid_timeline_fname)
         response = PreprocessUtil.idseq2words(response_in_id, id2target_vocab)
         print("Q: %s\n" % raw_question)
@@ -119,7 +108,7 @@ if __name__ == "__main__":
                 count += 1
                 raw_question = l.strip()
                 question_in_id = PreprocessUtil.words2idseq(raw_question, source_vocab2id)
-                response_in_id = model.infer(sess, question_in_id, params,
+                response_in_id = model.infer(sess, question_in_id,
                                              options, run_metadata, valid_timeline_fname)
                 response = PreprocessUtil.idseq2words(response_in_id, id2target_vocab)
                 print("Q: %s\n" % raw_question)

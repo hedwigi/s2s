@@ -1,59 +1,106 @@
 import os
 
-params = {
-    # Train Params
-    "lr": 0.001,
-    "keep_prob": 0.5,
-    "batch_size": 128,
-    "epochs": 50,
-    "valid_step": 2000,
-    "display_sample_per_n_batch": 300,
-    "model_dir": "./model",
-    "model_base": "s2s",
-    "valid_size": 0.1,
-    "n_samples2write": 10,
-    "source_vocab": "data/train.source_vocab",
-    "target_vocab": "data/train.target_vocab",
+from collections import defaultdict
 
-    # Model Params
+
+# Common Params
+params_common = {
+    # *** data params
     "pad_id": 0,  # padded with 0 in the model, not in file
     "start_id": 1,
     "end_id": 2,
     "unk_id": 3,  # since <UNK> should be created manually in DataLoader, should assign it with an id
     "source_vocab_size": 30000,
-    "encoding_embedding_size": 128,
-    "rnn_size": 256, # encoder decoder must have same number of layers and size
-    "num_layers": 1,
     "target_vocab_size": 30000,
-    "decoding_embedding_size": 128,
-
+    "source_vocab": "data/train.source_vocab",
+    "target_vocab": "data/train.target_vocab",
     "reverse_target": False,
 
-    # TransformerKyu
-    "maxlen": 16,  # Maximum number of words in a sentence. alias = T.
-                 # Feel free to increase this if you are ambitious.
-    "max_context_size": 6,
-    "min_cnt": 5,  # words whose occurred less than min_cnt are encoded as <UNK>.
-    "hidden_units": 512, # alias = C
-    "num_blocks": 6,  # number of encoder/decoder blocks
-    "num_epochs": 20,
-    "num_heads": 8,
-    "dropout_rate": 0.1,
-    "sinusoid": False,  # If True, use sinusoid. If false, positional embedding.
-    "max_infer_step": 15,
+    # *** training params
+    "batch_size": 128,
+    "epochs": 50,
+    "model_dir": "./model",
+    "model_base": "s2s",
 
-    # Test Tiny model
-    # "maxlen": 50,  # Maximum number of words in a sentence. alias = T.
-    #              # Feel free to increase this if you are ambitious.
-    # "max_context_size": 1,
-    # "min_cnt": 2,  # words whose occurred less than min_cnt are encoded as <UNK>.
-    # "hidden_units": 64, # alias = C
-    # "num_blocks": 2,  # number of encoder/decoder blocks
-    # "num_epochs": 20,
-    # "num_heads": 2,
-    # "dropout_rate": 0.1,
-    # "sinusoid": False,  # If True, use sinusoid. If false, positional embedding.
-    # "max_infer_step": 15,
+    # *** valid params
+    "valid_step": 200,
+    "display_sample_per_n_batch": 50,
+    "n_samples2write": 10,
+}
+
+BASE_PARAMS = defaultdict(
+    lambda: None,  # Set default value to None.
+
+    # Input params
+    default_batch_size=params_common["batch_size"],  # Maximum number of tokens per batch of examples.
+
+    # Model params
+    initializer_gain=1.0,  # Used in trainable variable initialization.
+    vocab_size=params_common["source_vocab_size"],  # Number of tokens defined in the vocabulary file.
+    hidden_size=512,  # Model dimension in the hidden layers.
+    num_hidden_layers=6,  # Number of layers in the encoder and decoder stacks.
+    num_heads=8,  # Number of heads to use in multi-headed attention.
+    filter_size=2048,  # Inner layer dimension in the feedforward network.
+
+    # Dropout values (only used when training)
+    layer_postprocess_dropout=0.1,
+    attention_dropout=0.1,
+    relu_dropout=0.1,
+
+    # Training params
+    label_smoothing=0.1,
+    learning_rate=2.0,
+    learning_rate_decay_rate=1.0,
+    learning_rate_warmup_steps=16000,
+
+    # Optimizer params
+    optimizer_adam_beta1=0.9,
+    optimizer_adam_beta2=0.997,
+    optimizer_adam_epsilon=1e-09,
+
+    # Default prediction params
+    extra_decode_length=5,
+    beam_size=4,
+    alpha=0.6,  # used to calculate length normalization in beam search
+
+    # TPU specific parameters
+    use_tpu=False,
+    static_batch=False,
+    allow_ffn_pad=True,
+)
+
+BIG_PARAMS = BASE_PARAMS.copy()
+BIG_PARAMS.update(
+    hidden_size=1024,
+    filter_size=4096,
+    num_heads=16,
+),
+
+TEST_PARAMS = BASE_PARAMS.copy()
+TEST_PARAMS.update(
+    hidden_size=32,
+    filter_size=64,
+    num_hidden_layers=2,
+    num_heads=2,
+)
+
+params_models = {
+
+    "S2S": {
+        # Train Params
+        "lr": 0.001,
+        "keep_prob": 0.5,
+        "encoding_embedding_size": 200,
+        "rnn_size": 128, # encoder decoder must have same number of layers and size
+        "num_layers": 1,
+        "decoding_embedding_size": 200,
+        },
+
+    "Transformer": {
+        "Base": BASE_PARAMS,
+        "Big": BIG_PARAMS,
+        "Test": TEST_PARAMS,
+    },
 
 }
 
