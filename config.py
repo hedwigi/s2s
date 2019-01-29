@@ -6,6 +6,10 @@ from collections import defaultdict
 # Common Params
 params_common = {
     # *** data params
+    "datadir": "data/en-fr",
+    "data_suffix": "small",
+
+    # *** vocab params
     "pad_id": 0,  # padded with 0 in the model, not in file
     "start_id": 1,
     "end_id": 2,
@@ -17,6 +21,8 @@ params_common = {
     "reverse_target": False,
 
     # *** training params
+    "mode": "train",                        # "single"|"valid_batch"
+    "model_name": ["Transformer", "Test"],  # ["S2S"]
     "batch_size": 128,
     "epochs": 50,
     "model_dir": "./model",
@@ -26,6 +32,8 @@ params_common = {
     "valid_step": 200,
     "display_sample_per_n_batch": 50,
     "n_samples2write": 10,
+    "results_dir": "results/",
+    "results_base": "trfm",
 }
 
 BASE_PARAMS = defaultdict(

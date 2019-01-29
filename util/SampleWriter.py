@@ -8,16 +8,16 @@ class SampleWriter:
     end_id = None
     pad_id = None
     start_id = None
-    dirdata = None
+    results_dir = None
 
-    def __init__(self, id2target_vocab, id2source_vocab, end_id, pad_id, start_id, reverse_target, dirdata):
+    def __init__(self, id2target_vocab, id2source_vocab, end_id, pad_id, start_id, reverse_target, results_dir):
         self.id2source_vocab = id2source_vocab
         self.id2target_vocab = id2target_vocab
         self.end_id = end_id
         self.pad_id = pad_id
         self.start_id = start_id
         self.reverse_target = reverse_target
-        self.dirdata = dirdata
+        self.results_dir = results_dir
 
     def show_inference_samples(self, source_batch, target_batch, infer_batch, n_sample):
         for i in range(n_sample):
@@ -34,7 +34,7 @@ class SampleWriter:
             fout.write("Source: %s,\tInfer: %s\n" % (" ".join(source_words), " ".join(infer_words)))
 
     def valid_infer_filename(self, model_name, i_epoch):
-        return os.path.join(self.dirdata, model_name + "_infer_results.ep" + str(i_epoch))
+        return os.path.join(self.results_dir, model_name + "_infer_results.ep" + str(i_epoch))
 
     def __ids2words(self, seq_ids, id2vocab):
         words = []

@@ -98,7 +98,7 @@ class Transformer:
                     num_valid_batch = 0
                     avg_valid_time = 0
                     avg_write_time = 0
-                    with open(sample_writer.valid_infer_filename("s2satt", i_epoch), "w") as fsample:
+                    with open(sample_writer.valid_infer_filename(self.params_common["results_base"], i_epoch), "w") as fsample:
                         while valid_iter.has_next(self.params_common["batch_size"]):
                             start_valid = time.clock()
                             num_valid_batch += 1
