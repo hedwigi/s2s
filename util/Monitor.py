@@ -2,9 +2,7 @@ class Monitor:
 
     @staticmethod
     def print_params(params):
-        print("="*60)
         print("# Model Architecture")
-        print("="*60)
         total_num_params = 0
         for param in params:
             num_params = 1
